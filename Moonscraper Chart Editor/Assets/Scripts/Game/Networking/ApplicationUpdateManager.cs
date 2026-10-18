@@ -12,7 +12,7 @@ public class ApplicationUpdateManager
 #else
     readonly string productHeader = "MoonscraperChartEditor";
 #endif
-    readonly string respositoryOwner = "FireFox2000000";
+    readonly string respositoryOwner = "Geomitron";
     readonly string repositoryName = "Moonscraper-Chart-Editor";
 
     public string currentVersion { get; private set; }
