@@ -15,6 +15,8 @@ public class BuildManager  {
 
     // Security Patch application location
     static readonly string UnityApplicationPatcherProgramPath = Path.GetFullPath(Path.Combine(Application.dataPath, "../../UnityApplicationPatcher-1.0.6-Win/UnityApplicationPatcherCLI.exe"));
+
+    static readonly string LicensePath = Path.GetFullPath(Path.Combine(Application.dataPath, "../../LICENSE"));
     
     // Inno Setup 6 ISCC.exe location
     static readonly string InstallerProgramPath = System.Environment.GetEnvironmentVariable("ISCC");
@@ -268,6 +270,9 @@ public class BuildManager  {
             // Copy a file from the project folder to the build folder, alongside the built game.
             FileUtil.CopyFileOrDirectory("Assets/Documentation", Path.Combine(path, "Documentation"));
         }
+
+        // Binary redistributions must carry the license
+        File.Copy(LicensePath, Path.Combine(path, "LICENSE.txt"));
 
         string extraFilesDir = "Assets/ExtraBuildFiles";
         if (Directory.Exists(extraFilesDir))
