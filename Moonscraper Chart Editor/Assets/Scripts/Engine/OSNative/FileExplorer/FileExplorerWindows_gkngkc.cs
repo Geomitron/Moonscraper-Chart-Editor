@@ -62,30 +62,10 @@ public class FileExplorerWindows_gkngkc : IFileExplorer
         return !string.IsNullOrEmpty(resultPath);
     }
 
+    // The first file type's extension is added to a name typed without one, so defExt isn't needed
     public bool SaveFilePanel(ExtensionFilter[] filters, string defaultFileName, string defExt, out string resultPath)
     {
-        var fd = new VistaSaveFileDialog();
-        fd.Title = "Save As";
-
-        var finalFilename = "";
-
-        if (!string.IsNullOrEmpty(defaultFileName))
-        {
-            finalFilename += defaultFileName;
-        }
-
-        fd.FileName = finalFilename;
-        fd.Filter = string.Join("|", System.Array.ConvertAll(filters, GetFilterFromFileExtensionList));
-        fd.FilterIndex = 1;
-        fd.DefaultExt = defExt;
-        fd.AddExtension = true;
-
-        var res = fd.ShowDialog(new WindowWrapper(GetActiveWindow()));
-        var filename = res == DialogResult.OK ? fd.FileName : string.Empty;
-        fd.Dispose();
-        resultPath = filename;
-
-        return !string.IsNullOrEmpty(resultPath);
+        return WindowsSaveFileDialog.Show(GetActiveWindow(), "Save As", filters, defaultFileName ?? string.Empty, out resultPath);
     }
 
     public bool OpenFolderPanel(out string resultPath)

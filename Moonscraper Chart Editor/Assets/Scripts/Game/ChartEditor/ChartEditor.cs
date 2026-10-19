@@ -696,9 +696,12 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         if (!forced)
             defaultFileName += "(UNFORCED)";
 
-        // A song from a .sng is saved into a .sng, which holds its audio
+        // A song from a .sng is saved into a .sng, which holds its audio. A new .sng is named as Bridge names one.
         ExtensionFilter chartFilter = new ExtensionFilter("Chart files", "chart");
         ExtensionFilter sngFilter = new ExtensionFilter("Song package", "sng");
+        if (currentSngSong == null || lastLoadedFile == string.Empty)
+            sngFilter.defaultFileName = SngSong.CreateFilename(currentSong);
+
         ExtensionFilter[] filters = currentSngSong != null ? new ExtensionFilter[] { sngFilter } : new ExtensionFilter[] { chartFilter, sngFilter };
 
         string fileName;
