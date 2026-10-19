@@ -32,6 +32,10 @@ public class StemMuteButtons
     const string MuteIcon = "";
     const string SoloIcon = "";
 
+    const string MuteHint = "Mute this stem";
+    const string SoloHint = "Play only this stem. Shift+click to play more stems.";
+    static readonly Vector2 c_hintOffset = new Vector2(14, -12);     // Below and right of the button
+
     class Row
     {
         public Song.AudioInstrument audio;
@@ -105,8 +109,8 @@ public class StemMuteButtons
         Image sliderBackground = slider.transform.Find("Background").GetComponent<Image>();
 
         float x = sliderRect.anchoredPosition.x + sliderRect.sizeDelta.x * (1 - sliderRect.pivot.x) + ButtonGap + ButtonWidth / 2;
-        CreateButton(sliderRect, "M", MuteIcon, x, sliderBackground, label, () => { StemMute.ToggleMute(audio); }, out row.muteImage, out row.muteText);
-        CreateButton(sliderRect, "S", SoloIcon, x + ButtonWidth + ButtonGap, sliderBackground, label, () => { StemMute.ToggleSolo(audio, Globals.secondaryInputActive); }, out row.soloImage, out row.soloText);
+        CreateButton(sliderRect, "M", MuteIcon, MuteHint, x, sliderBackground, label, () => { StemMute.ToggleMute(audio); }, out row.muteImage, out row.muteText);
+        CreateButton(sliderRect, "S", SoloIcon, SoloHint, x + ButtonWidth + ButtonGap, sliderBackground, label, () => { StemMute.ToggleSolo(audio, Globals.secondaryInputActive); }, out row.soloImage, out row.soloText);
 
         foreach (Graphic graphic in slider.GetComponentsInChildren<Graphic>(true))
         {
@@ -119,7 +123,7 @@ public class StemMuteButtons
         return row;
     }
 
-    void CreateButton(RectTransform sliderRect, string letter, string icon, float x, Image style, Text labelFont, UnityEngine.Events.UnityAction onClick, out Image image, out Text text)
+    void CreateButton(RectTransform sliderRect, string letter, string icon, string hint, float x, Image style, Text labelFont, UnityEngine.Events.UnityAction onClick, out Image image, out Text text)
     {
         GameObject button = new GameObject(sliderRect.name.Trim() + " " + letter, typeof(RectTransform), typeof(Image), typeof(Button));
         RectTransform rect = (RectTransform)button.transform;
@@ -156,6 +160,10 @@ public class StemMuteButtons
             text.fontSize = 14;
             text.fontStyle = FontStyle.Bold;
         }
+
+        HintMouseOver hintMouseOver = button.AddComponent<HintMouseOver>();
+        hintMouseOver.message = hint;
+        hintMouseOver.offset = c_hintOffset;
 
         Button buttonComponent = button.GetComponent<Button>();
         buttonComponent.targetGraphic = image;
