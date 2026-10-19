@@ -54,7 +54,8 @@ namespace MoonscraperChartEditor.Song.IO
         /// <param name="writePackage">Writes the new .sng's contents. It must close any stream it holds on packagePath before returning.</param>
         public static void WriteAndSwap(string journalPath, string packagePath, Action<FileStream> writePackage)
         {
-            string newPackagePath = packagePath + ".saving";
+            // A short name, so a .sng named as long as the file system allows still has room beside it
+            string newPackagePath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(packagePath)), Guid.NewGuid().ToString("N").Substring(0, 8) + ".saving");
 
             // For a swap, the expected length only records whether there was a .sng to replace
             using (FileStream journal = CreateJournal(journalPath, Kind.Swap, packagePath, File.Exists(packagePath) ? 1 : 0, null, newPackagePath))
