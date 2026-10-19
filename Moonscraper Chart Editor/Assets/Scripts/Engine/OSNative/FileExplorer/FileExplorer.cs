@@ -32,7 +32,15 @@ public static class FileExplorer  {
 
     public static bool SaveFilePanel(ExtensionFilter filter, string defaultFileName, string defExt, out string resultPath)
     {
-        return m_platformWrapper.SaveFilePanel(filter, defaultFileName, defExt, out resultPath);
+        return SaveFilePanel(new ExtensionFilter[] { filter }, defaultFileName, defExt, out resultPath);
+    }
+
+    /// <summary>
+    /// A save dialog offering several file types. The chosen type is the extension of resultPath.
+    /// </summary>
+    public static bool SaveFilePanel(ExtensionFilter[] filters, string defaultFileName, string defExt, out string resultPath)
+    {
+        return m_platformWrapper.SaveFilePanel(filters, defaultFileName, defExt, out resultPath);
     }
 
     public static bool OpenFolderPanel(out string resultPath)
