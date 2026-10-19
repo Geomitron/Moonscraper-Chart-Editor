@@ -148,12 +148,6 @@ namespace MoonscraperChartEditor.Song.IO
 
         public static Song ReadMidi(string path, ref CallbackState callBackState)
         {
-            // Initialize new song
-            Song song = new Song();
-
-            // Make message list
-            var messageList = new List<MessageProcessParams>();
-
             MidiFile midi;
 
             try
@@ -164,6 +158,39 @@ namespace MoonscraperChartEditor.Song.IO
             {
                 throw new SystemException("Bad or corrupted midi file- " + e.Message);
             }
+
+            return ReadMidi(midi, ref callBackState);
+        }
+
+        /// <summary>
+        /// Reads a .mid from its contents, such as the notes.mid inside a .sng.
+        /// </summary>
+        public static Song ReadMidi(byte[] contents, ref CallbackState callBackState)
+        {
+            MidiFile midi;
+
+            try
+            {
+                using (MemoryStream stream = new MemoryStream(contents))
+                {
+                    midi = MidiFile.Read(stream, ReadSettings);
+                }
+            }
+            catch (Exception e)
+            {
+                throw new SystemException("Bad or corrupted midi file- " + e.Message);
+            }
+
+            return ReadMidi(midi, ref callBackState);
+        }
+
+        static Song ReadMidi(MidiFile midi, ref CallbackState callBackState)
+        {
+            // Initialize new song
+            Song song = new Song();
+
+            // Make message list
+            var messageList = new List<MessageProcessParams>();
 
             if (midi.Chunks == null || midi.Chunks.Count < 1)
             {
