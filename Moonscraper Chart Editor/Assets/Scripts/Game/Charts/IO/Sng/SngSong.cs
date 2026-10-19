@@ -66,6 +66,50 @@ namespace MoonscraperChartEditor.Song.IO
             return string.Equals(Path.GetExtension(path), SngFile.FileExtension, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// The name Bridge gives a .sng, without the extension: "artist - name (charter)" from the song.ini text, or else Song Properties.
+        /// Characters files can't have in their names are replaced with ones that look alike, as Bridge does.
+        /// </summary>
+        public static string CreateFilename(Song song)
+        {
+            string filename = string.Format("{0} - {1} ({2})",
+                GetSongIniValue(song, "artist", song.metaData.artist, "Unknown Artist"),
+                GetSongIniValue(song, "name", song.name, "Unknown Name"),
+                GetSongIniValue(song, "charter", song.metaData.charter, "Unknown Charter"));
+
+            StringBuilder sanitised = new StringBuilder(filename.Length);
+            foreach (char c in filename)
+            {
+                switch (c)
+                {
+                    case '<': sanitised.Append('❮'); break;
+                    case '>': sanitised.Append('❯'); break;
+                    case ':': sanitised.Append('꞉'); break;
+                    case '"': sanitised.Append('\''); break;
+                    case '/': sanitised.Append('／'); break;
+                    case '\\': sanitised.Append('⧵'); break;
+                    case '|': sanitised.Append('⏐'); break;
+                    case '?': sanitised.Append('？'); break;
+                    case '*': sanitised.Append('⁎'); break;
+                    default: sanitised.Append(char.IsControl(c) ? '_' : c); break;
+                }
+            }
+
+            return sanitised.ToString();
+        }
+
+        static string GetSongIniValue(Song song, string key, string songPropertiesValue, string defaultValue)
+        {
+            foreach (string line in SongIniFunctions.IniTextFromSongProperties(song.iniProperties).Split('\n'))
+            {
+                string[] keyValue = line.Split(new char[] { '=' }, 2);
+                if (keyValue.Length == 2 && keyValue[0].Trim() == key && keyValue[1].Trim() != string.Empty)
+                    return keyValue[1].Trim();
+            }
+
+            return string.IsNullOrWhiteSpace(songPropertiesValue) ? defaultValue : songPropertiesValue.Trim();
+        }
+
         #region Opening
 
         /// <summary>
