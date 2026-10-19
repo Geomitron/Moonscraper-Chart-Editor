@@ -143,6 +143,43 @@ namespace MoonscraperChartEditor.Song.IO
 
         public void Write(Song song, ExportOptions exportOptions, out ErrorReport errorReport)
         {
+            string saveString = CreateChartText(song, exportOptions, out errorReport);
+
+            try
+            {
+                // Save to file
+                if (errorReport.resultantFileType == ChartIOHelper.FileSubType.MoonscraperPropriety || exportOptions.format == ExportOptions.Format.Msce)
+                {
+                    // Rename the file to the correct file type
+                    path = Path.ChangeExtension(path, MsceIOHelper.FileExtention);
+                }
+
+                File.WriteAllText(path, saveString, System.Text.Encoding.UTF8);
+            }
+            catch (Exception e)
+            {
+                Logger.LogException(e, "Error when writing text to file");
+            }
+        }
+
+        /// <summary>
+        /// The bytes Write saves for a chart's text, for writing a chart somewhere other than its own file, such as into a .sng.
+        /// </summary>
+        public static byte[] EncodeChartText(string chartText)
+        {
+            byte[] preamble = System.Text.Encoding.UTF8.GetPreamble();
+            byte[] text = System.Text.Encoding.UTF8.GetBytes(chartText);
+            byte[] contents = new byte[preamble.Length + text.Length];
+            Buffer.BlockCopy(preamble, 0, contents, 0, preamble.Length);
+            Buffer.BlockCopy(text, 0, contents, preamble.Length, text.Length);
+            return contents;
+        }
+
+        /// <summary>
+        /// The song as .chart text. The error report's resultantFileType says if it can only be saved as .msce.
+        /// </summary>
+        public string CreateChartText(Song song, ExportOptions exportOptions, out ErrorReport errorReport)
+        {
             song.UpdateCache();
 
             if (Path.GetExtension(path) == MsceIOHelper.FileExtention)
@@ -299,21 +336,7 @@ namespace MoonscraperChartEditor.Song.IO
                 saveString += s_chartSectionFooter;
             }
 
-            try
-            {
-                // Save to file
-                if (errorReport.resultantFileType == ChartIOHelper.FileSubType.MoonscraperPropriety || exportOptions.format == ExportOptions.Format.Msce)
-                {
-                    // Rename the file to the correct file type
-                    path = Path.ChangeExtension(path, MsceIOHelper.FileExtention);
-                }
-
-                File.WriteAllText(path, saveString, System.Text.Encoding.UTF8);
-            }
-            catch (Exception e)
-            {
-                Logger.LogException(e, "Error when writing text to file");
-            }
+            return saveString;
         }
 
         string GetPropertiesStringWithoutAudio(Song song, ExportOptions exportOptions)

@@ -157,7 +157,10 @@ namespace MoonscraperChartEditor.Song.IO
 
                     ChartIOHelper.FileSubType fileLoadType = standardChartFormat ? ChartIOHelper.FileSubType.Default : ChartIOHelper.FileSubType.MoonscraperPropriety;
 
-                    LoadChart(song, filepath, fileLoadType);
+                    using (StreamReader sr = File.OpenText(filepath))
+                    {
+                        LoadChart(song, sr, new FileInfo(filepath).Directory.FullName, fileLoadType);
+                    }
 
                     return song;
                 }
@@ -173,7 +176,30 @@ namespace MoonscraperChartEditor.Song.IO
             }
         }
 
-        static void LoadChart(Song song, string filepath, ChartIOHelper.FileSubType fileLoadType)
+        /// <summary>
+        /// Reads a .chart from its contents, such as the notes.chart inside a .sng.
+        /// </summary>
+        /// <param name="audioDirectory">Where audio file names saved in the chart are looked for</param>
+        public static Song ReadChart(byte[] contents, string audioDirectory)
+        {
+            try
+            {
+                Song song = new Song();
+
+                using (StreamReader sr = new StreamReader(new MemoryStream(contents), System.Text.Encoding.UTF8, true))
+                {
+                    LoadChart(song, sr, audioDirectory, ChartIOHelper.FileSubType.Default);
+                }
+
+                return song;
+            }
+            catch (System.Exception e)
+            {
+                throw new Exception("Could not open file: " + e.Message);
+            }
+        }
+
+        static void LoadChart(Song song, StreamReader sr, string audioDirectory, ChartIOHelper.FileSubType fileLoadType)
         {
             bool open = false;
             string dataName = string.Empty;
@@ -182,7 +208,6 @@ namespace MoonscraperChartEditor.Song.IO
 #if TIMING_DEBUG
         float time = Time.realtimeSinceStartup;
 #endif
-            StreamReader sr = File.OpenText(filepath);
 
             // Gather lines between {} brackets and submit data
             while (!sr.EndOfStream)
@@ -204,7 +229,7 @@ namespace MoonscraperChartEditor.Song.IO
                     open = false;
 
                     // Submit data
-                    SubmitChartData(song, dataName, dataStrings, fileLoadType, filepath);
+                    SubmitChartData(song, dataName, dataStrings, fileLoadType, audioDirectory);
 
                     dataName = string.Empty;
                     dataStrings.Clear();
@@ -219,15 +244,13 @@ namespace MoonscraperChartEditor.Song.IO
                     else if (dataStrings.Count > 0 && dataName != string.Empty)
                     {
                         // Submit data
-                        SubmitChartData(song, dataName, dataStrings, fileLoadType, filepath);
+                        SubmitChartData(song, dataName, dataStrings, fileLoadType, audioDirectory);
 
                         dataName = string.Empty;
                         dataStrings.Clear();
                     }
                 }
             }
-
-            sr.Close();
 
 #if TIMING_DEBUG
         Debug.Log("Chart file load time: " + (Time.realtimeSinceStartup - time));
@@ -237,7 +260,7 @@ namespace MoonscraperChartEditor.Song.IO
             song.UpdateCache();
         }
 
-        static void SubmitChartData(Song song, string dataName, List<string> stringData, ChartIOHelper.FileSubType fileLoadType, string filePath = "")
+        static void SubmitChartData(Song song, string dataName, List<string> stringData, ChartIOHelper.FileSubType fileLoadType, string audioDirectory)
         {
             switch (dataName)
             {
@@ -245,7 +268,7 @@ namespace MoonscraperChartEditor.Song.IO
 #if SONG_DEBUG
                 Debug.Log("Loading chart properties");
 #endif
-                    SubmitDataSong(song, stringData, new FileInfo(filePath).Directory.FullName);
+                    SubmitDataSong(song, stringData, audioDirectory);
                     break;
                 case ChartIOHelper.c_dataBlockSyncTrack:
 #if SONG_DEBUG
