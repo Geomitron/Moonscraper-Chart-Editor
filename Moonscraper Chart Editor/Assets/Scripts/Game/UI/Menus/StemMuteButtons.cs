@@ -16,7 +16,9 @@ public class StemMuteButtons
     const float ButtonWidth = 22;
     const float ButtonHeight = 20;
     const float ButtonGap = 4;
-    const float DimmedAlpha = 0.35f;
+
+    // Dimmed rows are darkened rather than made see-through, so a slider's handle still covers its bar
+    const float DimmedBrightness = 0.4f;
 
     static readonly Color c_offColour = new Color(0.45f, 0.45f, 0.45f);
     static readonly Color c_mutedColour = new Color(0.85f, 0.25f, 0.25f);
@@ -25,6 +27,11 @@ public class StemMuteButtons
     static readonly Color c_mutedTextColour = Color.white;
     static readonly Color c_soloedTextColour = Color.black;
 
+    // Windows' icon font, for a muted speaker and headphones. Without it, the buttons show M and S.
+    static readonly string[] c_iconFontNames = { "Segoe Fluent Icons", "Segoe MDL2 Assets" };
+    const string MuteIcon = "";
+    const string SoloIcon = "";
+
     class Row
     {
         public Song.AudioInstrument audio;
@@ -32,13 +39,16 @@ public class StemMuteButtons
         public Text muteText;
         public Image soloImage;
         public Text soloText;
-        public List<CanvasGroup> dimmed = new List<CanvasGroup>();
+        public List<KeyValuePair<Graphic, Color>> rowGraphics = new List<KeyValuePair<Graphic, Color>>();     // The slider and its label, with their own colours
     }
 
     readonly List<Row> m_rows = new List<Row>();
+    readonly Font m_iconFont;
 
     public StemMuteButtons(IDictionary<Song.AudioInstrument, Slider> sliders)
     {
+        m_iconFont = LoadIconFont();
+
         foreach (var slider in sliders)
         {
             m_rows.Add(CreateRow(slider.Key, slider.Value));
@@ -56,18 +66,35 @@ public class StemMuteButtons
         {
             bool muted = StemMute.IsMuted(row.audio);
             bool soloed = StemMute.IsSoloed(row.audio);
+            float brightness = songAudio.GetAudioIsLoaded(row.audio) ? 1 : DimmedBrightness;
 
-            row.muteImage.color = muted ? c_mutedColour : c_offColour;
-            row.muteText.color = muted ? c_mutedTextColour : c_offTextColour;
-            row.soloImage.color = soloed ? c_soloedColour : c_offColour;
-            row.soloText.color = soloed ? c_soloedTextColour : c_offTextColour;
+            row.muteImage.color = Darken(muted ? c_mutedColour : c_offColour, brightness);
+            row.muteText.color = Darken(muted ? c_mutedTextColour : c_offTextColour, brightness);
+            row.soloImage.color = Darken(soloed ? c_soloedColour : c_offColour, brightness);
+            row.soloText.color = Darken(soloed ? c_soloedTextColour : c_offTextColour, brightness);
 
-            float alpha = songAudio.GetAudioIsLoaded(row.audio) ? 1 : DimmedAlpha;
-            foreach (CanvasGroup group in row.dimmed)
+            foreach (var graphic in row.rowGraphics)
             {
-                group.alpha = alpha;
+                graphic.Key.color = Darken(graphic.Value, brightness);
             }
         }
+    }
+
+    static Color Darken(Color colour, float brightness)
+    {
+        return new Color(colour.r * brightness, colour.g * brightness, colour.b * brightness, colour.a);
+    }
+
+    static Font LoadIconFont()
+    {
+        var installed = new HashSet<string>(Font.GetOSInstalledFontNames());
+        foreach (string name in c_iconFontNames)
+        {
+            if (installed.Contains(name))
+                return Font.CreateDynamicFontFromOSFont(name, 16);
+        }
+
+        return null;
     }
 
     Row CreateRow(Song.AudioInstrument audio, Slider slider)
@@ -78,24 +105,23 @@ public class StemMuteButtons
         Image sliderBackground = slider.transform.Find("Background").GetComponent<Image>();
 
         float x = sliderRect.anchoredPosition.x + sliderRect.sizeDelta.x * (1 - sliderRect.pivot.x) + ButtonGap + ButtonWidth / 2;
-        GameObject mute = CreateButton(sliderRect, "M", x, sliderBackground, label, () => { StemMute.ToggleMute(audio); }, out row.muteImage, out row.muteText);
-        GameObject solo = CreateButton(sliderRect, "S", x + ButtonWidth + ButtonGap, sliderBackground, label, () => { StemMute.ToggleSolo(audio, Globals.secondaryInputActive); }, out row.soloImage, out row.soloText);
+        CreateButton(sliderRect, "M", MuteIcon, x, sliderBackground, label, () => { StemMute.ToggleMute(audio); }, out row.muteImage, out row.muteText);
+        CreateButton(sliderRect, "S", SoloIcon, x + ButtonWidth + ButtonGap, sliderBackground, label, () => { StemMute.ToggleSolo(audio, Globals.secondaryInputActive); }, out row.soloImage, out row.soloText);
 
-        foreach (GameObject dimmed in new GameObject[] { slider.gameObject, label != null ? label.gameObject : null, mute, solo })
+        foreach (Graphic graphic in slider.GetComponentsInChildren<Graphic>(true))
         {
-            if (dimmed == null)
-                continue;
-
-            CanvasGroup group = dimmed.GetComponent<CanvasGroup>();
-            row.dimmed.Add(group != null ? group : dimmed.AddComponent<CanvasGroup>());
+            row.rowGraphics.Add(new KeyValuePair<Graphic, Color>(graphic, graphic.color));
         }
+
+        if (label != null)
+            row.rowGraphics.Add(new KeyValuePair<Graphic, Color>(label, label.color));
 
         return row;
     }
 
-    GameObject CreateButton(RectTransform sliderRect, string text, float x, Image style, Text font, UnityEngine.Events.UnityAction onClick, out Image image, out Text label)
+    void CreateButton(RectTransform sliderRect, string letter, string icon, float x, Image style, Text labelFont, UnityEngine.Events.UnityAction onClick, out Image image, out Text text)
     {
-        GameObject button = new GameObject(sliderRect.name.Trim() + " " + text, typeof(RectTransform), typeof(Image), typeof(Button));
+        GameObject button = new GameObject(sliderRect.name.Trim() + " " + letter, typeof(RectTransform), typeof(Image), typeof(Button));
         RectTransform rect = (RectTransform)button.transform;
         rect.SetParent(sliderRect.parent, false);
         rect.anchorMin = sliderRect.anchorMin;
@@ -115,12 +141,21 @@ public class StemMuteButtons
         textRect.anchorMax = Vector2.one;
         textRect.sizeDelta = Vector2.zero;
 
-        label = textObject.GetComponent<Text>();
-        label.text = text;
-        label.alignment = TextAnchor.MiddleCenter;
-        label.fontSize = 14;
-        label.fontStyle = FontStyle.Bold;
-        label.font = font != null ? font.font : Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text = textObject.GetComponent<Text>();
+        text.alignment = TextAnchor.MiddleCenter;
+        if (m_iconFont != null)
+        {
+            text.text = icon;
+            text.font = m_iconFont;
+            text.fontSize = 14;
+        }
+        else
+        {
+            text.text = letter;
+            text.font = labelFont != null ? labelFont.font : Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.fontSize = 14;
+            text.fontStyle = FontStyle.Bold;
+        }
 
         Button buttonComponent = button.GetComponent<Button>();
         buttonComponent.targetGraphic = image;
@@ -129,8 +164,6 @@ public class StemMuteButtons
             onClick();
             Refresh();
         });
-
-        return button;
     }
 
     // The slider's label is the text beside it on the same row

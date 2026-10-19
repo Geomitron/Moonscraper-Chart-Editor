@@ -6,7 +6,7 @@ using MoonscraperChartEditor.Song;
 
 /// <summary>
 /// Mutes and solos the song's audio while charting, as Audacity's Mute and Solo buttons do, without changing the volume settings.
-/// When any audio is soloed, only soloed audio plays. Muted audio stays silent, even when soloed. Nothing is saved: everything plays again after a restart.
+/// When any audio is soloed, only soloed audio plays. Soloing audio unmutes it, and muting soloed audio silences it. Nothing is saved: everything plays again after a restart.
 /// </summary>
 public static class StemMute
 {
@@ -29,7 +29,7 @@ public static class StemMute
     }
 
     /// <summary>
-    /// Unsolos this audio if it's soloed. Otherwise solos only this audio.
+    /// Unsolos this audio if it's soloed. Otherwise solos only this audio, and unmutes it so it plays.
     /// </summary>
     /// <param name="keepOthers">Keep other audio soloed too, as Shift-clicking Solo does in Audacity</param>
     public static void ToggleSolo(Song.AudioInstrument audio, bool keepOthers)
@@ -49,6 +49,7 @@ public static class StemMute
         }
 
         s_soloed[(int)audio] = true;
+        s_muted[(int)audio] = false;
     }
 
     public static bool IsSilenced(Song.AudioInstrument audio)
