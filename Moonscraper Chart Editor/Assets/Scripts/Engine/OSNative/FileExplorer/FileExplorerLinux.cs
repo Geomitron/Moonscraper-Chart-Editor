@@ -40,11 +40,14 @@ public class FileExplorerLinux : IFileExplorer
         return !string.IsNullOrEmpty(resultPath);
     }
 
-    public bool SaveFilePanel(ExtensionFilter filter, string defaultFileName, string defExt, out string resultPath)
+    public bool SaveFilePanel(ExtensionFilter[] filters, string defaultFileName, string defExt, out string resultPath)
     {
+        var filtersAndAll = new List<ExtensionFilter>(filters);
+        filtersAndAll.Add(new ExtensionFilter("All Files", "*"));
+
         resultPath = Marshal.PtrToStringAnsi(noc_file_dialog_open(
                 NOC_FILE_DIALOG_SAVE | NOC_FILE_DIALOG_OVERWRITE_CONFIRMATION,
-                GetFilterFromFileExtensionList(new ExtensionFilter[] { filter, new ExtensionFilter("All Files", "*") }),
+                GetFilterFromFileExtensionList(filtersAndAll.ToArray()),
                 null,
                 $"{defaultFileName}.{defExt}"));
 

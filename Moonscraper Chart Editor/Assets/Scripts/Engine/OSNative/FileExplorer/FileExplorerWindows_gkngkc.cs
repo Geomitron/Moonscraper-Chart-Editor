@@ -62,7 +62,7 @@ public class FileExplorerWindows_gkngkc : IFileExplorer
         return !string.IsNullOrEmpty(resultPath);
     }
 
-    public bool SaveFilePanel(ExtensionFilter filter, string defaultFileName, string defExt, out string resultPath)
+    public bool SaveFilePanel(ExtensionFilter[] filters, string defaultFileName, string defExt, out string resultPath)
     {
         var fd = new VistaSaveFileDialog();
         fd.Title = "Save As";
@@ -75,7 +75,7 @@ public class FileExplorerWindows_gkngkc : IFileExplorer
         }
 
         fd.FileName = finalFilename;
-        fd.Filter = GetFilterFromFileExtensionList(filter);
+        fd.Filter = string.Join("|", System.Array.ConvertAll(filters, GetFilterFromFileExtensionList));
         fd.FilterIndex = 1;
         fd.DefaultExt = defExt;
         fd.AddExtension = true;
