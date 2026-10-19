@@ -16,6 +16,7 @@ public class SongAudioManager
     int audioLoads = 0;
     string audioFilesPath = string.Empty;
     const string AudioCacheFolderId = "TempSongAudio";
+    const string UnpackFolderPrefix = "sng-";
 
     public SongAudioManager()
     {
@@ -141,8 +142,13 @@ public class SongAudioManager
 
         try
         {
-            string copiedFilepath = Path.Combine(audioFilesPath, audio.ToString() + Path.GetExtension(filepath));
-            File.Copy(filepath, copiedFilepath, true);
+            // Audio unpacked from a .sng is already a copy that only this cache uses
+            string copiedFilepath = filepath;
+            if (!IsInCache(filepath))
+            {
+                copiedFilepath = Path.Combine(audioFilesPath, audio.ToString() + Path.GetExtension(filepath));
+                File.Copy(filepath, copiedFilepath, true);
+            }
 
             // Load sample data from waveform. This creates a thread on it's own.
             audioSampleData[audioStreamArrayPos] = new SampleData(copiedFilepath);
@@ -181,6 +187,44 @@ public class SongAudioManager
 #if TIMING_DEBUG
         Debug.Log("Total audio files load time: " + (Time.realtimeSinceStartup - time));
 #endif
+    }
+
+    /// <summary>
+    /// A new folder in the audio cache to unpack a .sng's audio into. It is deleted with the cache.
+    /// </summary>
+    public string CreateUnpackFolder()
+    {
+        string folder = Path.Combine(audioFilesPath, UnpackFolderPrefix + Guid.NewGuid().ToString());
+        Directory.CreateDirectory(folder);
+        return Path.GetFullPath(folder);
+    }
+
+    /// <summary>
+    /// Deletes the audio unpacked from .sng files other than the current song's.
+    /// </summary>
+    /// <param name="currentFolder">The current song's unpack folder, or null if it isn't from a .sng</param>
+    public void DeleteUnpackFolders(string currentFolder)
+    {
+        foreach (string folder in Directory.GetDirectories(audioFilesPath, UnpackFolderPrefix + "*"))
+        {
+            if (currentFolder != null && string.Equals(Path.GetFullPath(folder), Path.GetFullPath(currentFolder), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            try
+            {
+                Directory.Delete(folder, true);
+            }
+            catch (Exception e)
+            {
+                Logger.LogException(e, "Unable to delete unpacked .sng audio");
+            }
+        }
+    }
+
+    bool IsInCache(string filepath)
+    {
+        string cache = Path.GetFullPath(audioFilesPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return Path.GetFullPath(filepath).StartsWith(cache, StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()

@@ -68,11 +68,61 @@ namespace MoonscraperChartEditor.Song.IO
         }
 
         /// <summary>
+        /// Finds the audio file for each audio instrument among the files in a .sng. Clone Hero matches names in a .sng exactly.
+        /// </summary>
+        /// <returns>The name of each file found. Audio instruments without a file are left out.</returns>
+        public static Dictionary<Song.AudioInstrument, string> FindPackagedAudioFiles(IEnumerable<string> filenames)
+        {
+            var audioFiles = new Dictionary<Song.AudioInstrument, string>();
+            var filesByName = new Dictionary<string, string>(StringComparer.Ordinal);
+
+            foreach (string filename in filenames)
+            {
+                if (!filesByName.ContainsKey(filename))
+                    filesByName.Add(filename, filename);
+            }
+
+            foreach (var instrumentFilenames in c_audioInstrumentToFilenames)
+            {
+                string audioFile = FindFirstFile(filesByName, instrumentFilenames.Value);
+                if (audioFile != null)
+                    audioFiles.Add(instrumentFilenames.Key, audioFile);
+            }
+
+            return audioFiles;
+        }
+
+        /// <summary>
         /// The name, without extension, that Clone Hero looks for first for an audio instrument.
         /// </summary>
         public static string GetFilename(Song.AudioInstrument audio)
         {
             return c_audioInstrumentToFilenames[audio][0];
+        }
+
+        /// <summary>
+        /// Every name, without extension, that Clone Hero looks for for an audio instrument.
+        /// </summary>
+        public static IReadOnlyList<string> GetFilenames(Song.AudioInstrument audio)
+        {
+            return c_audioInstrumentToFilenames[audio];
+        }
+
+        /// <summary>
+        /// Whether a file has one of the names, with any audio extension Clone Hero reads. Letter case is ignored.
+        /// </summary>
+        public static bool HasAudioFilename(string filename, IEnumerable<string> names)
+        {
+            foreach (string name in names)
+            {
+                foreach (string extension in c_extensions)
+                {
+                    if (string.Equals(filename, name + extension, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         static string FindFirstFile(Dictionary<string, string> filesByName, string[] filenames)

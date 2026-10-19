@@ -8,6 +8,7 @@ using System.IO;
 using UnityEngine.EventSystems;
 using MoonscraperEngine.Audio;
 using MoonscraperChartEditor.Song;
+using MoonscraperChartEditor.Song.IO;
 
 /// <summary>
 /// Loads and processes any persistent data, like save data, as well as just convenient defines and properties that exists outside of the "Chart Editor" concept.
@@ -18,6 +19,8 @@ public class Globals : MonoBehaviour {
     public static readonly string LINE_ENDING = "\r\n";
     public const string TABSPACE = "  ";
     public static string autosaveLocation;
+    public static string sngAutosaveLocation;           // What the autosave needs to restore a song opened from a .sng
+    public static string sngSaveJournalLocation;        // An unfinished .sng save
     static string workingDirectory = string.Empty;
     public static string realWorkingDirectory { get { return workingDirectory; } }
 
@@ -77,6 +80,8 @@ public class Globals : MonoBehaviour {
         Application.runInBackground = true;
 
         autosaveLocation = Application.persistentDataPath + "/autosave.chart";
+        sngAutosaveLocation = Application.persistentDataPath + "/autosave_sng.json";
+        sngSaveJournalLocation = Application.persistentDataPath + "/sng_save.journal";
 
         viewMode = ViewMode.Chart;
         editor = ChartEditor.Instance;
@@ -180,6 +185,11 @@ public class Globals : MonoBehaviour {
     {
         yield return null;
 
+        // Finish a .sng save that a crash interrupted, before the autosave can reopen that .sng
+        string sngSaveError = SngSaveJournal.Recover(sngSaveJournalLocation);
+        if (sngSaveError != null)
+            editor.errorManager.QueueErrorMessage(sngSaveError);
+
         if (System.IO.File.Exists(autosaveLocation))
         {
 #if !UNITY_EDITOR
@@ -190,11 +200,57 @@ public class Globals : MonoBehaviour {
 
             if (result == NativeMessageBox.Result.Yes)
             {
-                yield return StartCoroutine(editor._Load(autosaveLocation, false));
+                yield return StartCoroutine(editor._Load(autosaveLocation, false, ReadSngAutosave()));
                 ChartEditor.isDirty = true;
             }
 #endif
         }
+    }
+
+    /// <summary>
+    /// The .sng the autosave was made from, if it was made from one that still exists.
+    /// </summary>
+    static SngSong.Autosave ReadSngAutosave()
+    {
+        try
+        {
+            if (File.Exists(sngAutosaveLocation))
+            {
+                SngSong.Autosave sngAutosave = JsonUtility.FromJson<SngSong.Autosave>(File.ReadAllText(sngAutosaveLocation));
+                if (sngAutosave != null && File.Exists(sngAutosave.path))
+                    return sngAutosave;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Logger.LogException(e, "Unable to read the .sng autosave");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Records the .sng the autosave is made from, or that it isn't made from one.
+    /// </summary>
+    /// <param name="sngAutosave">The SngSong.Autosave as JSON, or null</param>
+    public static void WriteSngAutosave(string sngAutosave)
+    {
+        if (sngAutosave != null)
+            File.WriteAllText(sngAutosaveLocation, sngAutosave, System.Text.Encoding.UTF8);
+        else if (File.Exists(sngAutosaveLocation))
+            File.Delete(sngAutosaveLocation);
+    }
+
+    public static void DeleteAutosave()
+    {
+        if (File.Exists(autosaveLocation))
+        {
+            File.Delete(autosaveLocation);
+            Debug.Log("Autosave deleted");
+        }
+
+        if (File.Exists(sngAutosaveLocation))
+            File.Delete(sngAutosaveLocation);
     }
     
     void Update()
@@ -243,11 +299,8 @@ public class Globals : MonoBehaviour {
 
         // Delete autosaved chart. If chart is not deleted then that means there may have been a problem like a crash and the autosave should be reloaded the next time the program is opened. 
 
-        if (deleteAutosave && File.Exists(autosaveLocation))
-        {
-            File.Delete(autosaveLocation);
-            Debug.Log("Autosave deleted");
-        }
+        if (deleteAutosave)
+            DeleteAutosave();
     }
 
     string GetConfigPath()

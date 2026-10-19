@@ -37,6 +37,7 @@ public class AutoSaveSystem : SystemManagerState.System
         ChartEditor editor = ChartEditor.Instance;
 
         autosaveSong = new Song(editor.currentSong);
+        string sngAutosave = editor.currentSngSong != null ? JsonUtility.ToJson(editor.currentSngSong.CreateAutosave(editor.currentSong)) : null;
 
         await Task.Run(() =>
         {
@@ -45,6 +46,9 @@ public class AutoSaveSystem : SystemManagerState.System
 
             try
             {
+                // Written first, so an autosaved chart is never paired with another song's .sng
+                Globals.WriteSngAutosave(sngAutosave);
+
                 ChartWriter.ErrorReport errorReport;
                 ExportOptions exportOptions = editor.currentSong.defaultExportOptions;
                 exportOptions.writeAudioLocations = true;   // The autosave isn't in the song's directory, recovering from a crash needs these to find the audio

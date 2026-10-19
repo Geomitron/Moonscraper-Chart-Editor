@@ -66,6 +66,13 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     public SongObjectPoolManager songObjectPoolManager { get { return _songObjectPoolManager; } }
 
     string lastLoadedFile = string.Empty;
+
+    /// <summary>
+    /// The .sng the current song was opened from or saved into, or null.
+    /// </summary>
+    public SngSong currentSngSong { get; private set; }
+    string currentUnpackFolder = null;              // Where the current song's audio was unpacked from its .sng
+    string currentSongDirectory = string.Empty;     // The folder of the chart the current song was opened from, which Save As can pack into a .sng
     public WindowHandleManager windowHandleManager { get; private set; }
     [HideInInspector]
     public ErrorManager errorManager { get; private set; }
@@ -145,7 +152,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     [HideInInspector]
     public ChartEditorSessionFlags sessionFlags = ChartEditorSessionFlags.None;
 
-    readonly string[] ValidFileExtentions = new string[] { "chart", "mid", "msce" };
+    readonly string[] ValidFileExtentions = new string[] { "chart", "mid", "msce", "sng" };
 
     // Use this for initialization
     void Awake () {
@@ -205,7 +212,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         {
             if (System.IO.File.Exists(arg))
             {
-                bool validExtention = false;
+                bool validExtention = SngSong.IsSngPath(arg);
                 foreach (string ext in ValidFileExtentions)
                 {
                     if (System.IO.Path.GetExtension(arg).TrimStart('.') == ext)
@@ -359,6 +366,14 @@ public class ChartEditor : UnitySingleton<ChartEditor>
             if (result == NativeMessageBox.Result.Yes)
             {
                 if (!_Save())
+                {
+                    return false;
+                }
+
+                // A failed .sng save marks the song dirty again, such as while Clone Hero plays it. Its changes then stay open, with the error shown.
+                while (isSaving) ;
+
+                if (isDirty)
                 {
                     return false;
                 }
@@ -598,7 +613,11 @@ public class ChartEditor : UnitySingleton<ChartEditor>
             return;
 
         lastLoadedFile = string.Empty;
+        currentSngSong = null;
+        currentSongDirectory = string.Empty;
         currentSongAudio.FreeAudioStreams();
+        currentUnpackFolder = null;
+        currentSongAudio.DeleteUnpackFolders(currentUnpackFolder);
         currentSong = new Song();
         currentSong.resolution = Globals.gameSettings.newSongResolution;
 
@@ -629,8 +648,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     {
         Stop();
 
-        if (System.IO.File.Exists(Globals.autosaveLocation))
-            System.IO.File.Delete(Globals.autosaveLocation);
+        Globals.DeleteAutosave();
 
         StartCoroutine(_Load());
     }
@@ -678,8 +696,13 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         if (!forced)
             defaultFileName += "(UNFORCED)";
 
+        // A song from a .sng is saved into a .sng, which holds its audio
+        ExtensionFilter chartFilter = new ExtensionFilter("Chart files", "chart");
+        ExtensionFilter sngFilter = new ExtensionFilter("Song package", "sng");
+        ExtensionFilter[] filters = currentSngSong != null ? new ExtensionFilter[] { sngFilter } : new ExtensionFilter[] { chartFilter, sngFilter };
+
         string fileName;
-        if (FileExplorer.SaveFilePanel(new ExtensionFilter("Chart files", "chart"), defaultFileName, "chart", out fileName))
+        if (FileExplorer.SaveFilePanel(filters, defaultFileName, filters[0].extensions[0], out fileName))
         {
             ExportOptions exportOptions = currentSong.defaultExportOptions;
             exportOptions.forced = forced;
@@ -698,15 +721,25 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         if (currentSong != null && !isSaving)
         {
             Debug.Log("Saving to file- " + System.IO.Path.GetFullPath(filename));
-            lastLoadedFile = System.IO.Path.GetFullPath(filename);
-            RecordAudioOverrides();
 
-            _saveTask = SaveCurrentSongAsync(filename, exportOptions);
+            // A failed .sng save marks the song dirty again, so this comes first
+            isDirty = false;
+
+            if (SngSong.IsSngPath(filename))
+            {
+                // Becomes the last loaded file once it's saved
+                _saveTask = SaveSngAsync(filename, exportOptions);
+            }
+            else
+            {
+                lastLoadedFile = System.IO.Path.GetFullPath(filename);
+                RecordAudioOverrides();
+
+                _saveTask = SaveCurrentSongAsync(filename, exportOptions);
+            }
 
             if (isSaving)
                 events.saveEvent.Fire();
-
-            isDirty = false;
 
             if (Globals.gameSettings.autoValidateSongOnSave)
             {
@@ -722,7 +755,8 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         }
     }
 
-    public IEnumerator _Load(string currentFileName, bool recordLastLoaded = true)
+    /// <param name="sngAutosave">For an autosave made from a .sng: the .sng to reopen with the autosaved chart</param>
+    public IEnumerator _Load(string currentFileName, bool recordLastLoaded = true, SngSong.Autosave sngAutosave = null)
     {
         LoadingTasksManager tasksManager = services.loadingTasksManager;
 
@@ -732,8 +766,12 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         float totalLoadTime = Time.realtimeSinceStartup;
 #endif
         bool mid = false;
+        bool sng = sngAutosave != null || SngSong.IsSngPath(currentFileName);
+        string songDirectory = recordLastLoaded && !sng ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(currentFileName)) : string.Empty;
 
         Song newSong = null;
+        SngSong newSngSong = null;
+        string unpackFolder = null;
         MidReader.CallbackState midiCallbackState = MidReader.CallbackState.None;
 
         List<LoadingTask> tasks = new List<LoadingTask>()
@@ -749,11 +787,23 @@ public class ChartEditor : UnitySingleton<ChartEditor>
                     return;
                 }
 
-                mid = System.IO.Path.GetExtension(currentFileName) == ".mid";
+                mid = !sng && System.IO.Path.GetExtension(currentFileName) == ".mid";
 
                 try
                 {
-                    if (mid)
+                    if (sng)
+                    {
+                        unpackFolder = currentSongAudio.CreateUnpackFolder();
+
+                        if (sngAutosave != null)
+                        {
+                            newSong = ChartReader.ReadChart(currentFileName);
+                            newSngSong = SngSong.Recover(sngAutosave, unpackFolder, newSong);
+                        }
+                        else
+                            newSngSong = SngSong.Open(currentFileName, unpackFolder, ref midiCallbackState, out newSong);
+                    }
+                    else if (mid)
                         newSong = MidReader.ReadMidi(currentFileName, ref midiCallbackState);
                     else
                         newSong = ChartReader.ReadChart(currentFileName);
@@ -761,14 +811,21 @@ public class ChartEditor : UnitySingleton<ChartEditor>
                 catch (Exception e)
                 {
                     currentSong = backup;
+                    newSong = null;
 
-                    if (mid)
+                    if (sng)
+                        errorManager.QueueErrorMessage(Logger.LogException(e, "Failed to open .sng file"));
+                    else if (mid)
                         errorManager.QueueErrorMessage(Logger.LogException(e, "Failed to open mid file"));
                     else
                         errorManager.QueueErrorMessage(Logger.LogException(e, "Failed to open chart file"));
 
                     error = true;
                 }
+
+                // A .sng holds its song's audio and metadata
+                if (sng)
+                    return;
 
                 // The autosave isn't in the song's directory, the audio file locations saved in it are the only record of the song's audio
                 if (newSong != null && recordLastLoaded)
@@ -825,7 +882,10 @@ public class ChartEditor : UnitySingleton<ChartEditor>
 
         // Tasks have finished
         if (error)
+        {
+            currentSongAudio.DeleteUnpackFolders(currentUnpackFolder);
             yield break;    // Immediate exit
+        }
 
         isDirty = false;
 
@@ -836,12 +896,29 @@ public class ChartEditor : UnitySingleton<ChartEditor>
             Debug.Log("Loaded mid file");
         }
 
-        if (recordLastLoaded && currentFileName != string.Empty && !mid)
+        if (newSngSong != null)
+        {
+            // A .sng holding notes.mid is saved as a new .sng, as with a .mid
+            if (newSngSong.chartIsMidi)
+            {
+                lastLoadedFile = string.Empty;
+                isDirty = true;
+            }
+            else
+                lastLoadedFile = newSngSong.path;
+        }
+        else if (recordLastLoaded && currentFileName != string.Empty && !mid)
             lastLoadedFile = System.IO.Path.GetFullPath(currentFileName);
         else
             lastLoadedFile = string.Empty;
 
         currentSong = newSong;
+        currentSngSong = newSngSong;
+        currentSongDirectory = songDirectory;
+
+        // The previous song's audio streams were freed while loading
+        currentUnpackFolder = unpackFolder;
+        currentSongAudio.DeleteUnpackFolders(currentUnpackFolder);
 
         sessionFlags &= ~ChartEditorSessionFlags.CurrentChartSavedInProprietyFormat;
 
@@ -903,7 +980,8 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     /// </summary>
     public void RecordAudioOverrides()
     {
-        if (lastLoadedFile != string.Empty)
+        // Audio chosen for a song from a .sng is saved into the .sng
+        if (lastLoadedFile != string.Empty && currentSngSong == null)
             AudioOverrides.Record(currentSong, System.IO.Path.GetDirectoryName(lastLoadedFile));
     }
 
@@ -1033,6 +1111,42 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         }
 #endif
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Starts a thread that saves the song into a .sng: into the .sng it came from, or a new .sng packed from its folder.
+    /// </summary>
+    Task SaveSngAsync(string filepath, ExportOptions exportOptions)
+    {
+        Song songCopy = new Song(currentSong);
+        SngSong sngSong = currentSngSong;
+        string songDirectory = currentSongDirectory;
+        string journalPath = Globals.sngSaveJournalLocation;
+        filepath = System.IO.Path.GetFullPath(filepath);
+
+        return Task.Run(() => SaveSng(songCopy, sngSong, songDirectory, filepath, exportOptions, journalPath));
+    }
+
+    void SaveSng(Song song, SngSong sngSong, string songDirectory, string filepath, ExportOptions exportOptions, string journalPath)
+    {
+        try
+        {
+            currentSngSong = sngSong != null ? sngSong.Save(song, exportOptions, filepath, journalPath) : SngSong.SaveFolder(song, exportOptions, songDirectory, filepath, journalPath);
+            lastLoadedFile = filepath;
+
+            Debug.Log("Save complete!");
+        }
+        catch (SngSong.SaveException e)
+        {
+            isDirty = true;
+            Debug.LogError("Save failed! " + e.Message);
+            errorManager.QueueErrorMessage(e.Message);
+        }
+        catch (Exception e)
+        {
+            isDirty = true;
+            errorManager.QueueErrorMessage(Logger.LogException(e, string.Format("Couldn't save \"{0}\". If Clone Hero is playing this song, leave it and save again. Your changes are still unsaved in the editor.", filepath)));
+        }
     }
 
     /// <summary>
