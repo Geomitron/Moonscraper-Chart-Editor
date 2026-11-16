@@ -181,6 +181,7 @@ public static class SongIniFunctions
         }
 
         // Fill out difficulty tags with metadata difficulty if it has not been initilised
+        if (song.metaData.hasDifficulty)
         {
             Metadata metaData = song.metaData;
             AddTagIfAlreadyExistantAndDefault(ini, "diff_band", metaData.difficulty.ToString(), UninitialisedDifficultyValue);
