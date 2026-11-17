@@ -1093,15 +1093,25 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     }
 
     /// <summary>
+    /// A copy of the song's song.ini keys to save, with song_length measured from the audio when it's loaded.
+    /// </summary>
+    public SongIni CopyIniPropertiesForSaving()
+    {
+        SongIni ini = new SongIni(currentSong.iniProperties);
+        int? length = measuredSongLengthMs;
+        if (length.HasValue)
+            ini.Set("song_length", length.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        return ini;
+    }
+
+    /// <summary>
     /// A copy of the song to save, with song.ini's song_length measured from the audio when it's loaded.
     /// </summary>
     public Song CopySongForSaving()
     {
         Song song = new Song(currentSong);
-        int? length = measuredSongLengthMs;
-        if (length.HasValue)
-            song.iniProperties.Set("song_length", length.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
-
+        song.iniProperties = CopyIniPropertiesForSaving();
         return song;
     }
 
