@@ -19,7 +19,6 @@ namespace MoonscraperChartEditor.Song.IO
         public const string MidiFilename = "notes.mid";
 
         // Clone Hero reads these with bool.TryParse, which only accepts true and false
-        static readonly HashSet<string> c_boolMetadataKeys = new HashSet<string>() { "modchart", "pro_drums", "five_lane_drums", "explicit_lyrics", "eighthnote_hopo" };
 
         // The registered names a song folder is packed with, besides the chart and song.ini. Audio is also found through CloneHeroAudioFiles.
         static readonly string[] c_packedAudioNames = { "song", "guitar", "bass", "rhythm", "keys", "vocals", "vocals_1", "vocals_2", "drums", "drums_1", "drums_2", "drums_3", "drums_4", "crowd", "preview" };
@@ -73,9 +72,9 @@ namespace MoonscraperChartEditor.Song.IO
         public static string CreateFilename(Song song)
         {
             string filename = string.Format("{0} - {1} ({2})",
-                GetSongIniValue(song, "artist", song.metaData.artist, "Unknown Artist"),
-                GetSongIniValue(song, "name", song.name, "Unknown Name"),
-                GetSongIniValue(song, "charter", song.metaData.charter, "Unknown Charter"));
+                GetSongIniValue(song, "artist", "Unknown Artist"),
+                GetSongIniValue(song, "name", "Unknown Name"),
+                GetSongIniValue(song, "charter", "Unknown Charter"));
 
             StringBuilder sanitised = new StringBuilder(filename.Length);
             foreach (char c in filename)
@@ -98,16 +97,10 @@ namespace MoonscraperChartEditor.Song.IO
             return sanitised.ToString();
         }
 
-        static string GetSongIniValue(Song song, string key, string songPropertiesValue, string defaultValue)
+        static string GetSongIniValue(Song song, string key, string defaultValue)
         {
-            foreach (string line in SongIniFunctions.IniTextFromSongProperties(song.iniProperties).Split('\n'))
-            {
-                string[] keyValue = line.Split(new char[] { '=' }, 2);
-                if (keyValue.Length == 2 && keyValue[0].Trim() == key && keyValue[1].Trim() != string.Empty)
-                    return keyValue[1].Trim();
-            }
-
-            return string.IsNullOrWhiteSpace(songPropertiesValue) ? defaultValue : songPropertiesValue.Trim();
+            string value = song.iniProperties.Get(key);
+            return value == string.Empty ? defaultValue : value;
         }
 
         #region Opening
@@ -131,7 +124,7 @@ namespace MoonscraperChartEditor.Song.IO
                 byte[] chartContents = package.ReadFile(stream, chart);
                 song = chartIsMidi ? MidReader.ReadMidi(chartContents, ref callBackState) : ChartReader.ReadChart(chartContents, Path.GetDirectoryName(path));
 
-                song.iniProperties = IniFromMetadata(package.metadata);
+                SongIniFunctions.OpenSongIni(song, package.metadata);
 
                 var audio = UnpackAudio(package, stream, unpackDirectory);
 
@@ -142,7 +135,7 @@ namespace MoonscraperChartEditor.Song.IO
                     song.SetAudioLocation(audioInstrument, audio.TryGetValue(audioInstrument, out packagedAudio) ? packagedAudio.location : string.Empty);
                 }
 
-                return new SngSong(path, chartIsMidi, NormaliseLoadedMetadata(package.metadata), audio);
+                return new SngSong(path, chartIsMidi, package.metadata, audio);
             }
         }
 
@@ -187,7 +180,7 @@ namespace MoonscraperChartEditor.Song.IO
             RecoverInterruptedSave(journalPath);
 
             byte[] chart = CreateChart(song, exportOptions, targetPath);
-            var metadata = MetadataFromIni(song.iniProperties);
+            var metadata = SongIniFunctions.SavedPairs(song);
 
             using (FileStream sourceStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
@@ -235,7 +228,7 @@ namespace MoonscraperChartEditor.Song.IO
             RecoverInterruptedSave(journalPath);
 
             byte[] chart = CreateChart(song, exportOptions, targetPath);
-            var metadata = MetadataFromIni(song.iniProperties);
+            var metadata = SongIniFunctions.SavedPairs(song);
             byte[] metadataSection = CreateMetadataSection(metadata);
 
             var files = new List<SngFileContents>();
@@ -360,55 +353,6 @@ namespace MoonscraperChartEditor.Song.IO
 
         #region Metadata
 
-        // Song Properties shows the metadata as song.ini text
-        static INIParser IniFromMetadata(IEnumerable<KeyValuePair<string, string>> metadata)
-        {
-            StringBuilder text = new StringBuilder();
-            foreach (var pair in metadata)
-            {
-                text.Append(pair.Key).Append(" = ").Append(pair.Value).Append('\n');
-            }
-
-            return SongIniFunctions.SongIniFromString(text.ToString());
-        }
-
-        /// <summary>
-        /// The metadata to save, in the order Song Properties shows it. Clone Hero's true/false settings are written as True or False, and empty values are left out, as SngCli does.
-        /// </summary>
-        static List<KeyValuePair<string, string>> MetadataFromIni(INIParser ini)
-        {
-            var metadata = new List<KeyValuePair<string, string>>();
-            var keys = new HashSet<string>();
-
-            foreach (string line in SongIniFunctions.IniTextFromSongProperties(ini).Split('\n'))
-            {
-                string[] keyValue = line.Split(new char[] { '=' }, 2);
-                string key = keyValue[0].Trim();
-                string value = keyValue.Length > 1 ? keyValue[1].Trim() : string.Empty;
-
-                if (key == string.Empty || value == string.Empty || !keys.Add(key))
-                    continue;
-
-                if (c_boolMetadataKeys.Contains(key))
-                {
-                    if (value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1")
-                        value = "True";
-                    else if (value.Equals("false", StringComparison.OrdinalIgnoreCase) || value == "0")
-                        value = "False";
-                }
-
-                metadata.Add(new KeyValuePair<string, string>(key, value));
-            }
-
-            return metadata;
-        }
-
-        // The loaded metadata as it reads back from Song Properties, to tell whether the user changed it
-        static List<KeyValuePair<string, string>> NormaliseLoadedMetadata(IEnumerable<KeyValuePair<string, string>> metadata)
-        {
-            return MetadataFromIni(IniFromMetadata(metadata));
-        }
-
         static bool MetadataEquals(List<KeyValuePair<string, string>> a, List<KeyValuePair<string, string>> b)
         {
             if (a.Count != b.Count)
@@ -464,7 +408,7 @@ namespace MoonscraperChartEditor.Song.IO
 
         public Autosave CreateAutosave(Song song)
         {
-            Autosave autosave = new Autosave() { path = path, chartIsMidi = chartIsMidi, metadata = SongIniFunctions.IniTextFromSongProperties(song.iniProperties) };
+            Autosave autosave = new Autosave() { path = path, chartIsMidi = chartIsMidi, metadata = SongIniFunctions.SavedText(song) };
 
             foreach (Song.AudioInstrument audioInstrument in EnumX<Song.AudioInstrument>.Values)
             {
@@ -491,7 +435,9 @@ namespace MoonscraperChartEditor.Song.IO
                 SngFile package = SngFile.Read(stream);
                 var audio = UnpackAudio(package, stream, unpackDirectory);
 
-                song.iniProperties = SongIniFunctions.SongIniFromString(autosave.metadata);
+                // Earlier versions saved the lines without the [song] header
+                string iniText = autosave.metadata.TrimStart().StartsWith("[") ? autosave.metadata : "[song]\n" + autosave.metadata;
+                SongIniFunctions.OpenSongIni(song, iniText);
 
                 foreach (Song.AudioInstrument audioInstrument in EnumX<Song.AudioInstrument>.Values)
                 {
@@ -508,7 +454,7 @@ namespace MoonscraperChartEditor.Song.IO
                         song.SetAudioLocation(audioInstrument, autosaveAudio.location);
                 }
 
-                return new SngSong(path, autosave.chartIsMidi, NormaliseLoadedMetadata(package.metadata), audio);
+                return new SngSong(path, autosave.chartIsMidi, package.metadata, audio);
             }
         }
 

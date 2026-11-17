@@ -834,31 +834,23 @@ public class ChartEditor : UnitySingleton<ChartEditor>
                 if (newSong != null && recordLastLoaded)
                     SetCloneHeroAudioLocations(newSong, System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(currentFileName)));
 
+                if (newSong == null)
+                    return;
+
+                // The autosave's song.ini is beside it under its own name
+                string iniPath = recordLastLoaded ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(currentFileName), SongIniFunctions.INI_FILENAME) : Globals.autosaveIniLocation;
+                string iniText = string.Empty;
                 try
                 {
-                    string directory = System.IO.Path.GetDirectoryName(currentFileName);
-                    string iniPath = System.IO.Path.Combine(directory, "song.ini");
-                    if (newSong != null && System.IO.File.Exists(iniPath))
-                    {
-                        try
-                        {
-                            newSong.iniProperties.Open(iniPath);
-                            newSong.iniProperties = SongIniFunctions.FixupSongIniWhitespace(newSong.iniProperties);
-                        }
-                        catch (Exception e)
-                        {
-                            errorManager.QueueErrorMessage(Logger.LogException(e, "Failed to parse song.ini"));
-                        }
-                        finally
-                        {
-                            newSong.iniProperties.Close();
-                        }
-                    }
+                    if (System.IO.File.Exists(iniPath))
+                        iniText = System.IO.File.ReadAllText(iniPath);
                 }
                 catch (Exception e)
                 {
-                    // TODO
+                    errorManager.QueueErrorMessage(Logger.LogException(e, "Failed to read song.ini"));
                 }
+
+                SongIniFunctions.OpenSongIni(newSong, iniText);
             }),
 
             new LoadingTask("Loading audio", () =>
@@ -1082,6 +1074,38 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     }
 
     /// <summary>
+    /// The song's length as song.ini has it: the longest audio file other than crowd, in milliseconds rounded up. Null with no audio loaded.
+    /// </summary>
+    public int? measuredSongLengthMs
+    {
+        get
+        {
+            int? length = null;
+            foreach (Song.AudioInstrument audio in EnumX<Song.AudioInstrument>.Values)
+            {
+                AudioStream stream = currentSongAudio.GetAudioStream(audio);
+                if (audio != Song.AudioInstrument.Crowd && AudioManager.StreamIsValid(stream))
+                    length = Math.Max(length ?? 0, stream.ChannelLengthInMilliseconds());
+            }
+
+            return length;
+        }
+    }
+
+    /// <summary>
+    /// A copy of the song to save, with song.ini's song_length measured from the audio when it's loaded.
+    /// </summary>
+    public Song CopySongForSaving()
+    {
+        Song song = new Song(currentSong);
+        int? length = measuredSongLengthMs;
+        if (length.HasValue)
+            song.iniProperties.Set("song_length", length.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        return song;
+    }
+
+    /// <summary>
     /// Is this song currently being saved asyncronously?
     /// </summary>
     public bool isSaving
@@ -1109,7 +1133,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
 #else
         if (!isSaving)
         {
-            Song songCopy = new Song(currentSong);
+            Song songCopy = CopySongForSaving();
             return Task.Run(() => SaveSong(songCopy, filepath, exportOptions));
         }
 #endif
@@ -1121,7 +1145,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     /// </summary>
     Task SaveSngAsync(string filepath, ExportOptions exportOptions)
     {
-        Song songCopy = new Song(currentSong);
+        Song songCopy = CopySongForSaving();
         SngSong sngSong = currentSngSong;
         string songDirectory = currentSongDirectory;
         string journalPath = Globals.sngSaveJournalLocation;
@@ -1190,32 +1214,8 @@ public class ChartEditor : UnitySingleton<ChartEditor>
                 sessionFlags |= ChartEditorSessionFlags.CurrentChartSavedInProprietyFormat;
             }
 
-            string iniPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(filepath), SongIniFunctions.INI_FILENAME);
-            if (!song.iniProperties.IsEmpty)
-            {
-                Debug.Log("Saving song.ini");
-
-                INIParser parser = new INIParser();
-                try
-                {
-                    parser.Open(iniPath);
-                    parser.WriteValue(song.iniProperties);
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError("Error encountered when trying to write song.ini. " + e.Message);
-                }
-                finally
-                {
-                    parser.Close();
-                }
-
-                Debug.Log("song.ini save complete!");
-            }
-            else if (System.IO.File.Exists(iniPath))
-            {
-                System.IO.File.Delete(iniPath);
-            }
+            SongIniFunctions.WriteSongIni(song, System.IO.Path.GetDirectoryName(filepath));
+            Debug.Log("song.ini save complete!");
         }
         catch (System.Exception e)
         {

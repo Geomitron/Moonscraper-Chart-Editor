@@ -339,43 +339,16 @@ namespace MoonscraperChartEditor.Song.IO
             return saveString;
         }
 
+        // song.ini holds the song's metadata, so [Song] holds only what reading the chart needs, and Moonscraper's own length
         string GetPropertiesStringWithoutAudio(Song song, ExportOptions exportOptions)
         {
             string saveString = string.Empty;
             if (exportOptions.targetResolution <= 0)
                 exportOptions.targetResolution = song.resolution;
 
-            Metadata metaData = song.metaData;
-            var floatCultureInfo = ChartIOHelper.MetaData.c_cultureInfo;
-
-            // Song properties  
-            if (metaData.name != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.name.saveFormat, metaData.name);
-            if (metaData.artist != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.artist.saveFormat, metaData.artist);
-            if (metaData.charter != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.charter.saveFormat, metaData.charter);
-            if (metaData.album != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.album.saveFormat, metaData.album);
-            if (metaData.year != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.year.saveFormat, metaData.year);
-            saveString += string.Format(floatCultureInfo, ChartIOHelper.MetaData.offset.saveFormat, song.offset);
-
             saveString += string.Format(ChartIOHelper.MetaData.resolution.saveFormat, exportOptions.targetResolution);
-            if (metaData.player2 != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.player2.saveFormat, metaData.player2.ToLower());
-            if (metaData.hasDifficulty)
-                saveString += string.Format(ChartIOHelper.MetaData.difficulty.saveFormat, metaData.difficulty);
             if (song.manualLength.HasValue)
-                saveString += string.Format(floatCultureInfo, ChartIOHelper.MetaData.length.saveFormat, song.manualLength.Value);
-            if (metaData.previewStart.HasValue)
-                saveString += string.Format(floatCultureInfo, ChartIOHelper.MetaData.previewStart.saveFormat, metaData.previewStart.Value);
-            if (metaData.previewEnd.HasValue)
-                saveString += string.Format(floatCultureInfo, ChartIOHelper.MetaData.previewEnd.saveFormat, metaData.previewEnd.Value);
-            if (metaData.genre != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.genre.saveFormat, metaData.genre);
-            if (metaData.mediatype != string.Empty)
-                saveString += string.Format(ChartIOHelper.MetaData.mediaType.saveFormat, metaData.mediatype);
+                saveString += string.Format(ChartIOHelper.MetaData.c_cultureInfo, ChartIOHelper.MetaData.length.saveFormat, song.manualLength.Value);
 
             return saveString;
         }

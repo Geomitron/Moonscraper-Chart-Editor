@@ -1,308 +1,120 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using UnityEngine;
 using MoonscraperChartEditor.Song;
 
 public static class SongIniFunctions
 {
-    public const string Deprecated_INI_SECTION_HEADER = "Song";
-    public const string INI_SECTION_HEADER = "song";
     public const string INI_FILENAME = "song.ini";
 
-    const string CH_TAG_FILE = "clone_hero_ini_tags.txt";
-    const string GHL_RHYTHM_DIFFICULTY_TAG = "diff_rhythm_ghl";
-    // Earlier versions wrote GHL rhythm's difficulty under this name, which Clone Hero and YARG don't read
-    const string OLD_GHL_RHYTHM_DIFFICULTY_TAG = "diff_rhythmghl";
-    // Pro drums' difficulties, which rate the drums chart
-    static readonly string[] PRO_DRUMS_DIFFICULTY_TAGS = { "diff_drums_real", "diff_drums_real_ps" };
-    const string UninitialisedDifficultyValue = "-1";
-
-    static KeyValuePair<string, string>[] s_chTags = null;
-    static KeyValuePair<string, string>[] chTags
+    /// <summary>
+    /// Sets the song's song.ini keys from the song.ini opened with it, as <see cref="SongIniKeys.NormalizeOpened"/> reads them. A key
+    /// it doesn't set is filled from the chart's [Song] section, as games read [Song] without a song.ini. The song's offset is
+    /// song.ini's delay.
+    /// </summary>
+    /// <param name="iniPairs">The song.ini's [song] lines, or none if the song has no song.ini</param>
+    public static void OpenSongIni(Song song, IEnumerable<KeyValuePair<string, string>> iniPairs)
     {
-        get
+        var pairs = SongIniKeys.NormalizeOpened(iniPairs);
+        var setKeys = new HashSet<string>();
+        foreach (var pair in pairs)
+            setKeys.Add(pair.Key);
+
+        foreach (var pair in ChartSongPairs(song))
         {
-            if (s_chTags == null)
-            {
-                // Only need to load this once, but need to wait for the working directory to be initialised correctly
-                s_chTags = LoadTags(Path.Combine(Globals.CONFIG_FOLDER, CH_TAG_FILE));
-                Debug.Assert(s_chTags != null);
-            }
-
-            return s_chTags;
+            if (!setKeys.Contains(pair.Key))
+                pairs.Add(pair);
         }
+
+        pairs = SongIniKeys.NormalizeOpened(pairs);
+
+        song.offset = 0;
+        foreach (var pair in pairs)
+        {
+            float delayMs;
+            if (pair.Key == "delay" && float.TryParse(pair.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out delayMs))
+                song.offset = delayMs / 1000;
+        }
+
+        song.iniProperties = new SongIni(pairs);
     }
 
-    // song.ini is compatible with more games if there is a space before and after the '=' character in ini files. Ty Phase Shift.
-    static string PrefixSpaceToINIValue(string val)
+    /// <summary>
+    /// The song.ini file for a song from a song.ini's text, for <see cref="OpenSongIni"/>.
+    /// </summary>
+    public static void OpenSongIni(Song song, string iniText)
     {
-        return " " + val.Trim();
+        OpenSongIni(song, SongIniKeys.Parse(iniText));
     }
 
-    public static void PopulateIniWithSongMetadata(Song song, INIParser ini, float songLengthSeconds)
+    // The [Song] values games read when there's no song.ini, as song.ini keys: times in milliseconds as Clone Hero rounds them
+    static List<KeyValuePair<string, string>> ChartSongPairs(Song song)
     {
         Metadata metaData = song.metaData;
-
-        int songLength = (int)(songLengthSeconds * 1000);
-
-        ini.WriteValue(INI_SECTION_HEADER, "name ", PrefixSpaceToINIValue(song.name));
-        ini.WriteValue(INI_SECTION_HEADER, "artist ", PrefixSpaceToINIValue(metaData.artist));
-        ini.WriteValue(INI_SECTION_HEADER, "album ", PrefixSpaceToINIValue(metaData.album));
-        ini.WriteValue(INI_SECTION_HEADER, "genre ", PrefixSpaceToINIValue(metaData.genre));
-        ini.WriteValue(INI_SECTION_HEADER, "year ", PrefixSpaceToINIValue(metaData.year));
-        ini.WriteValue(INI_SECTION_HEADER, "song_length ", PrefixSpaceToINIValue(songLength.ToString()));
-        ini.WriteValue(INI_SECTION_HEADER, "charter ", PrefixSpaceToINIValue(metaData.charter));
-    }
-
-    delegate void AddTagFn(string key, string defaultVal);
-
-    public static void AddDefaultIniTags(Song song, INIParser ini, float songLengthSeconds)
-    {
-        Metadata metaData = song.metaData;
-        AddTagFn AddTagIfNonExistant = (string key, string defaultVal) => {
-            ini.WriteValue(INI_SECTION_HEADER, key.Trim() + " ", ini.ReadValue(INI_SECTION_HEADER, key, PrefixSpaceToINIValue(defaultVal)));
+        var pairs = new List<KeyValuePair<string, string>>
+        {
+            new KeyValuePair<string, string>("name", metaData.name),
+            new KeyValuePair<string, string>("artist", metaData.artist),
+            new KeyValuePair<string, string>("album", metaData.album),
+            new KeyValuePair<string, string>("genre", metaData.genre),
+            new KeyValuePair<string, string>("year", metaData.year),
+            new KeyValuePair<string, string>("charter", metaData.charter),
+            new KeyValuePair<string, string>("delay", SecondsToMs(song.offset).ToString(CultureInfo.InvariantCulture)),
         };
 
-        AddTagIfNonExistant("name", song.name);
-        AddTagIfNonExistant("artist", metaData.artist);
-        AddTagIfNonExistant("album", metaData.album);
-        AddTagIfNonExistant("genre", metaData.genre);
-        AddTagIfNonExistant("year", metaData.year);
-        AddTagIfNonExistant("song_length", ((int)(songLengthSeconds * 1000)).ToString());
-        AddTagIfNonExistant("charter", metaData.charter);
+        if (metaData.hasDifficulty)
+            pairs.Add(new KeyValuePair<string, string>("diff_band", metaData.difficulty.ToString(CultureInfo.InvariantCulture)));
+
+        // Moonscraper wrote a preview start of 0 whether or not the charter chose one, and a preview end of 0 when there was none
+        if (metaData.previewStart.HasValue && SecondsToMs(metaData.previewStart.Value) != 0)
+            pairs.Add(new KeyValuePair<string, string>("preview_start_time", SecondsToMs(metaData.previewStart.Value).ToString(CultureInfo.InvariantCulture)));
+        if (metaData.previewEnd.HasValue && SecondsToMs(metaData.previewEnd.Value) > 0)
+            pairs.Add(new KeyValuePair<string, string>("preview_end_time", SecondsToMs(metaData.previewEnd.Value).ToString(CultureInfo.InvariantCulture)));
+
+        return pairs;
     }
 
-    static string GetCHDifficultyTagForInstrument(Song.Instrument instrument)
+    // As Clone Hero reads a [Song] time: (int)Math.Ceiling(float.Parse(value) * 1000), in single precision
+    static int SecondsToMs(float seconds)
     {
-        switch (instrument)
-        {
-            case Song.Instrument.Guitar:
-                return "diff_guitar";
-
-            case Song.Instrument.GuitarCoop:
-                return "diff_guitar_coop";
-
-            case Song.Instrument.Rhythm:
-                return "diff_rhythm";
-
-            case Song.Instrument.Bass:
-                return "diff_bass";
-
-            case Song.Instrument.Drums:
-                return "diff_drums";
-
-            case Song.Instrument.Keys:
-                return "diff_keys";
-
-            case Song.Instrument.GHLiveGuitar:
-                return "diff_guitarghl";
-
-            case Song.Instrument.GHLiveBass:
-                return "diff_bassghl";
-
-            case Song.Instrument.GHLiveRhythm:
-                return GHL_RHYTHM_DIFFICULTY_TAG;
-
-            case Song.Instrument.GHLiveCoop:
-                return "diff_guitar_coop_ghl";
-
-            case Song.Instrument.GHLiveKeys:
-                return "diff_keys_ghl";
-        }
-
-        return string.Empty;
+        float ms = seconds * 1000;
+        return (int)System.Math.Ceiling(ms);
     }
 
-    static bool InstrumentHasNotes(Song song, Song.Instrument instrument)
+    /// <summary>
+    /// The song.ini keys a save writes: the song's keys, and its offset as delay.
+    /// </summary>
+    public static List<KeyValuePair<string, string>> SavedPairs(Song song)
     {
-        foreach (Song.Difficulty difficulty in MoonscraperEngine.EnumX<Song.Difficulty>.Values)
-        {
-            if (song.GetChart(instrument, difficulty).notes.Count > 0)
-                return true;
-        }
+        var pairs = new List<KeyValuePair<string, string>>(song.iniProperties.pairs);
+        pairs.RemoveAll(pair => pair.Key == "delay");
 
-        return false;
+        int delayMs = Mathf.RoundToInt(song.offset * 1000);
+        if (delayMs != 0)
+            pairs.Add(new KeyValuePair<string, string>("delay", delayMs.ToString(CultureInfo.InvariantCulture)));
+
+        return SongIniKeys.Normalize(pairs);
     }
 
-    static void AddTagIfAlreadyExistantAndDefault(INIParser ini, string key, string newValue, string defaultVal)
+    /// <summary>
+    /// The song.ini file a save writes, as <see cref="SavedPairs"/> has it.
+    /// </summary>
+    public static string SavedText(Song song)
     {
-        string realKey = key.Trim() + " ";
-        if (ini.IsKeyExists(INI_SECTION_HEADER, realKey))
-        {
-            string currentValue = ini.ReadValue(INI_SECTION_HEADER, realKey, PrefixSpaceToINIValue(defaultVal));
-
-            if (currentValue == PrefixSpaceToINIValue(defaultVal))
-            {
-                ini.WriteValue(INI_SECTION_HEADER, realKey, PrefixSpaceToINIValue(newValue));
-            }
-        }
+        return SongIniKeys.IniText(SavedPairs(song));
     }
 
-    public static void AddCloneHeroIniTags(Song song, INIParser ini, float songLengthSeconds)
+    /// <summary>
+    /// Writes the song's song.ini into a folder, replacing the one there. A song without keys has no song.ini, so one there is deleted.
+    /// </summary>
+    public static void WriteSongIni(Song song, string directory)
     {
-        AddTagFn AddTagIfNonExistant = (string key, string defaultVal) => {
-            string realKey = key.Trim() + " ";
-            ini.WriteValue(INI_SECTION_HEADER, realKey, ini.ReadValue(INI_SECTION_HEADER, realKey, PrefixSpaceToINIValue(defaultVal)));
-        };
- 
-        AddDefaultIniTags(song, ini, songLengthSeconds);
-
-        // Difficulty tags are only for instruments the chart has notes for
-        HashSet<string> unchartedDifficultyTags = new HashSet<string>();
-        foreach (Song.Instrument instrument in MoonscraperEngine.EnumX<Song.Instrument>.Values)
-        {
-            string tag = GetCHDifficultyTagForInstrument(instrument);
-
-            if (!string.IsNullOrEmpty(tag) && !InstrumentHasNotes(song, instrument))
-            {
-                unchartedDifficultyTags.Add(tag);
-
-                if (instrument == Song.Instrument.Drums)
-                {
-                    unchartedDifficultyTags.UnionWith(PRO_DRUMS_DIFFICULTY_TAGS);
-                }
-            }
-        }
-
-        string oldGhlRhythmKey = OLD_GHL_RHYTHM_DIFFICULTY_TAG + " ";
-        string ghlRhythmKey = GHL_RHYTHM_DIFFICULTY_TAG + " ";
-        if (ini.IsKeyExists(INI_SECTION_HEADER, oldGhlRhythmKey) && !ini.IsKeyExists(INI_SECTION_HEADER, ghlRhythmKey) && !unchartedDifficultyTags.Contains(GHL_RHYTHM_DIFFICULTY_TAG))
-        {
-            ini.WriteValue(INI_SECTION_HEADER, ghlRhythmKey, ini.ReadValue(INI_SECTION_HEADER, oldGhlRhythmKey, string.Empty));
-        }
-
-        foreach (var tag in chTags)
-        {
-            if (!unchartedDifficultyTags.Contains(tag.Key))
-            {
-                AddTagIfNonExistant(tag.Key, tag.Value);
-            }
-        }
-
-        // Fill out difficulty tags with metadata difficulty if it has not been initilised
-        if (song.metaData.hasDifficulty)
-        {
-            Metadata metaData = song.metaData;
-            AddTagIfAlreadyExistantAndDefault(ini, "diff_band", metaData.difficulty.ToString(), UninitialisedDifficultyValue);
-
-            foreach (Song.Instrument instrument in MoonscraperEngine.EnumX<Song.Instrument>.Values)
-            {
-                if (instrument == Song.Instrument.Unrecognised)
-                    continue;
-
-                string tag = GetCHDifficultyTagForInstrument(instrument);
-
-                if (!string.IsNullOrEmpty(tag))
-                {
-                    AddTagIfAlreadyExistantAndDefault(ini, tag, metaData.difficulty.ToString(), UninitialisedDifficultyValue);
-                }
-            }
-        }
-
-        foreach (string tag in unchartedDifficultyTags)
-        {
-            ini.KeyDelete(INI_SECTION_HEADER, tag + " ");
-        }
-
-        ini.KeyDelete(INI_SECTION_HEADER, oldGhlRhythmKey);
-
-        // A difficulty of -1 is no difficulty, so its tag does nothing
-        foreach (string key in ini.GetKeys(INI_SECTION_HEADER))
-        {
-            if (key.Trim().StartsWith("diff_") && ini.ReadValue(INI_SECTION_HEADER, key, string.Empty).Trim() == UninitialisedDifficultyValue)
-            {
-                ini.KeyDelete(INI_SECTION_HEADER, key);
-            }
-        }
-    }
-
-    static KeyValuePair<string, string>[] LoadTags(string filename)
-    {
-        List<KeyValuePair<string, string>> tags = new List<KeyValuePair<string, string>>();
-
-        if (string.IsNullOrEmpty(Globals.realWorkingDirectory))
-        {
-            Debug.Assert(false, "Working directory has not been initialised yet.");
-            return null;
-        }
-
-        string filepath = Path.Combine(Globals.realWorkingDirectory, filename);
-        Debug.Log("Loading ini tags from " + Path.GetFullPath(filepath));
-
-        if (File.Exists(filepath))
-        {
-            StreamReader ifs = null;
-            try
-            {
-                ifs = File.OpenText(filepath);
-
-                while (true)
-                {
-                    string line = ifs.ReadLine();
-                    if (line == null)
-                        break;
-
-                    line.Replace('"', '\0');
-                    if (line != string.Empty)
-                    {
-                        string[] splitLines = line.Split('=');
-                        string key = splitLines[0];
-                        string val = splitLines.Length > 1 ? splitLines[1] : string.Empty;
-
-                        tags.Add(new KeyValuePair<string, string>(key.Trim(), val.Trim()));
-                    }
-                }
-
-                Debug.Log(tags.Count + " tag strings loaded");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError("Error: unable to load events- " + e.Message);
-            }
-            finally
-            {
-                if (ifs != null)
-                    ifs.Close();
-            }
-        }
-
-        return tags.ToArray();
-    }
-
-    public static string IniTextFromSongProperties(INIParser iniProperties)
-    {
-        string str = iniProperties.GetSectionValues(new string[] { INI_SECTION_HEADER, Deprecated_INI_SECTION_HEADER }, INIParser.Formatting.Whitespaced);
-
-        str = str.Replace("\r\n", "\n");
-        return str;
-    }
-
-    public static INIParser SongIniFromString(string str)
-    {
-        INIParser newProperties = new INIParser();
-
-        string[] seperatingTags = { System.Environment.NewLine.ToString(), "\n" };
-        string[] customIniLines = str.Split(seperatingTags, System.StringSplitOptions.None);
-
-        foreach (string line in customIniLines)
-        {
-            string[] keyVal = line.Split(new char[] { '=' }, 2);
-            if (keyVal.Length >= 1)
-            {
-                string key = keyVal[0].Trim();
-                string val = keyVal.Length > 1 ? keyVal[1].Trim() : string.Empty;
-
-                if (!string.IsNullOrEmpty(key))
-                    newProperties.WriteValue(INI_SECTION_HEADER, key + " ", " " + val);
-            }
-        }
-
-        return newProperties;
-    }
-
-    public static INIParser FixupSongIniWhitespace(INIParser iniProperties)
-    {
-        return SongIniFromString(IniTextFromSongProperties(iniProperties));
+        string iniPath = Path.Combine(directory, INI_FILENAME);
+        if (SavedPairs(song).Count > 0)
+            File.WriteAllText(iniPath, SavedText(song), new UTF8Encoding(false));
+        else if (File.Exists(iniPath))
+            File.Delete(iniPath);
     }
 }
