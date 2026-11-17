@@ -284,7 +284,7 @@ namespace MoonscraperChartEditor.Song.IO
                 throw new SaveException("This chart has events that a .chart file can't hold, so it can't be saved into a .sng. Nothing was saved." + Globals.LINE_ENDING + errorReport.GetFullReport());
             }
 
-            return ChartWriter.EncodeChartText(chartText);
+            return ChartWriter.ChartBytes(song, chartText);
         }
 
         /// <summary>

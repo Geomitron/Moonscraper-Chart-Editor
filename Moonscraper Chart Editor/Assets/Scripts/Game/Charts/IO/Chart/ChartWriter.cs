@@ -154,7 +154,7 @@ namespace MoonscraperChartEditor.Song.IO
                     path = Path.ChangeExtension(path, MsceIOHelper.FileExtention);
                 }
 
-                File.WriteAllText(path, saveString, System.Text.Encoding.UTF8);
+                File.WriteAllBytes(path, ChartBytes(song, saveString));
             }
             catch (Exception e)
             {
@@ -163,7 +163,19 @@ namespace MoonscraperChartEditor.Song.IO
         }
 
         /// <summary>
-        /// The bytes Write saves for a chart's text, for writing a chart somewhere other than its own file, such as into a .sng.
+        /// The bytes Write saves for a song's chart text, for writing a chart somewhere other than its own file too, such as into a .sng:
+        /// the file the song was opened from when the text is that file's, else <see cref="EncodeChartText"/>.
+        /// </summary>
+        public static byte[] ChartBytes(Song song, string chartText)
+        {
+            if (song.openedChartBytes != null && chartText == OpenedChartText(song.openedChartBytes))
+                return song.openedChartBytes;
+
+            return EncodeChartText(chartText);
+        }
+
+        /// <summary>
+        /// A chart's text in UTF-8, with the byte order mark Moonscraper writes.
         /// </summary>
         public static byte[] EncodeChartText(string chartText)
         {
@@ -338,18 +350,19 @@ namespace MoonscraperChartEditor.Song.IO
 
             // The autosave's [Song] section has the audio files, which recovering the song needs
             if (!exportOptions.writeAudioLocations)
-                saveString = KeepOpenedChart(saveString, song.openedChartText);
+                saveString = KeepOpenedChart(saveString, song.openedChartBytes);
 
             return saveString;
         }
 
         // Games and leaderboards identify a chart by its file's hash, so leaving metadata out of [Song] mustn't change a chart file
         // that wouldn't change otherwise: if everything after [Song] is as the song was opened, the chart is written as it was opened.
-        static string KeepOpenedChart(string chartText, string openedChartText)
+        static string KeepOpenedChart(string chartText, byte[] openedChartBytes)
         {
-            if (openedChartText == null)
+            if (openedChartBytes == null)
                 return chartText;
 
+            string openedChartText = OpenedChartText(openedChartBytes);
             int bodyStart = SongSectionEnd(chartText);
             int openedBodyStart = SongSectionEnd(openedChartText);
             int bodyLength = chartText.Length - bodyStart;
@@ -357,6 +370,13 @@ namespace MoonscraperChartEditor.Song.IO
                 return chartText;
 
             return string.CompareOrdinal(chartText, bodyStart, openedChartText, openedBodyStart, bodyLength) == 0 ? openedChartText : chartText;
+        }
+
+        // A chart file's text, read as ChartReader reads it
+        static string OpenedChartText(byte[] contents)
+        {
+            using (StreamReader sr = new StreamReader(new MemoryStream(contents), Encoding.UTF8, true))
+                return sr.ReadToEnd();
         }
 
         // Where the text after a chart's [Song] section starts, or -1 if the chart doesn't start with one as Moonscraper writes it
