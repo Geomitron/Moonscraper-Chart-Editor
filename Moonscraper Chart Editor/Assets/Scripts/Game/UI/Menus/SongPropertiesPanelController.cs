@@ -226,6 +226,8 @@ public class SongPropertiesPanelController : TabMenu
         layout.preferredHeight = preferredHeight;
         layout.minHeight = preferredHeight;
         layout.flexibleWidth = flexibleWidth;
+        // Above a text box's own size, which it measures from its text
+        layout.layoutPriority = 2;
         return layout;
     }
 
@@ -316,6 +318,23 @@ public class SongPropertiesPanelController : TabMenu
         return input;
     }
 
+    // A text box that wraps its value over a few lines. Enter still ends editing, and the box's validation keeps line breaks
+    // out, since a song.ini value is one line.
+    static void MakeMultiLine(InputField input, int lines)
+    {
+        input.lineType = InputField.LineType.MultiLineSubmit;
+        Text text = input.textComponent;
+        text.alignment = TextAnchor.UpperLeft;
+        var placeholder = input.placeholder as Text;
+        if (placeholder != null)
+            placeholder.alignment = TextAnchor.UpperLeft;
+
+        // The height of each line after the first, from the font's own line height (the size it's imported at), since a text
+        // generator measures with the wrong size until the font has been drawn at the box's size
+        float lineHeight = text.font.lineHeight * text.fontSize / text.font.fontSize * text.lineSpacing;
+        SetLayoutSize(input, 0, c_controlHeight + (lines - 1) * lineHeight, 1);
+    }
+
     Button AddButton(Transform row, string text, UnityEngine.Events.UnityAction onClick)
     {
         Button button = Instantiate(buttonTemplate, row, false);
@@ -388,6 +407,9 @@ public class SongPropertiesPanelController : TabMenu
                         input.contentType = InputField.ContentType.IntegerNumber;
                     else
                         input.onValidateInput = ValidateStringMetadataInput;
+
+                    if (row.lines > 1)
+                        MakeMultiLine(input, row.lines);
 
                     MarkRecommendedEmpty(input, recommended);
                     input.onValueChanged.AddListener(text =>

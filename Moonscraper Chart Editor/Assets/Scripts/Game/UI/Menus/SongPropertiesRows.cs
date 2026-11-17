@@ -62,6 +62,7 @@ public static class SongPropertiesRows
         public string[] optionValues;
         public string[] optionLabels;
         public bool playbackPositionButton;
+        public int lines = 1;       // The text box's height in lines, for values that are often longer than one line
         public string subheading;   // A row that's only a subheading over the rows after it
     }
 
@@ -120,6 +121,12 @@ public static class SongPropertiesRows
         return row;
     }
 
+    static Row MultiLine(Row row, int lines)
+    {
+        row.lines = lines;
+        return row;
+    }
+
     static Row Subheading(string title)
     {
         return new Row() { subheading = title };
@@ -158,10 +165,10 @@ public static class SongPropertiesRows
             Seconds("preview_start_time", "Preview start", Shown.Always, Recommended.Always, true),
             Seconds("preview_end_time", "Preview end", Shown.Always, Recommended.No, true),
             Text("icon", "Icon", Shown.Always),
-            Text("loading_phrase", "Loading phrase", Shown.Always, Recommended.Always),
+            MultiLine(Text("loading_phrase", "Loading phrase", Shown.Always, Recommended.Always), 4),
             Integer("album_track", "Album track", Shown.Always, Recommended.Always, "from 1"),
             Integer("playlist_track", "Playlist track", Shown.ShowAll, Recommended.No, "from 1"),
-            Text("playlist", "Playlist"),
+            MultiLine(Text("playlist", "Playlist"), 2),
             Text("sub_playlist", "Sub-playlist"),
             Bool("modchart", "Modchart"),
             Bool("explicit_lyrics", "Explicit lyrics", Shown.Always),
