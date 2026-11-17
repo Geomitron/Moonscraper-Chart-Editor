@@ -138,8 +138,7 @@ public class Export : DisplayMenu {
         string saveDirectory;
         if (FileExplorer.OpenFolderPanel(out saveDirectory))
         {
-            Song song = editor.currentSong;
-            float songLength = editor.currentSongLength;
+            Song song = editor.CopySongForSaving();
 
             saveDirectory = saveDirectory.Replace('\\', Path.DirectorySeparatorChar);
             saveDirectory = saveDirectory.Replace('/', Path.DirectorySeparatorChar);
@@ -155,7 +154,7 @@ public class Export : DisplayMenu {
                 }
             }
 
-            StartCoroutine(ExportCHPackage(saveDirectory, song, songLength, exportOptions));
+            StartCoroutine(ExportCHPackage(saveDirectory, song, exportOptions));
         }
     }
 
@@ -164,7 +163,7 @@ public class Export : DisplayMenu {
         LoadingTasksManager tasksManager = editor.services.loadingTasksManager;
 
         Song song = editor.currentSong;// new Song(editor.currentSong);
-        float songLength = editor.currentSongLength;
+        Song iniSong = editor.CopySongForSaving();
 
         exportOptions.tickOffset = TickFunctions.TimeToDis(0, delayTime, exportOptions.targetResolution, 120);
 
@@ -215,7 +214,7 @@ public class Export : DisplayMenu {
         {
             tasks.Add(new LoadingTask("Generating Song.ini", () =>
             {
-                GenerateSongIni(Path.GetDirectoryName(filepath), song, songLength);
+                GenerateSongIni(Path.GetDirectoryName(filepath), iniSong);
             }));
         }
 
@@ -376,33 +375,15 @@ public class Export : DisplayMenu {
         delayInputField.text = "2.5";
     }
 
-    static void GenerateSongIni(string path, Song song, float songLengthSeconds, bool isChPackage = false)
+    static void GenerateSongIni(string path, Song song)
     {
-        Metadata metaData = song.metaData;
-        INIParser parser = new INIParser();
-
         try
         {
-            parser.Open(Path.Combine(path, "song.ini"));
-
-            // Clone explicit properties
-            parser.WriteValue(song.iniProperties);
-
-            SongIniFunctions.AddDefaultIniTags(song, parser, songLengthSeconds);
-
-            if (isChPackage)
-            {
-                // Write defaults for any missing CH tags
-                SongIniFunctions.AddCloneHeroIniTags(song, parser, songLengthSeconds);
-            }
+            SongIniFunctions.WriteSongIni(song, path);
         }
         catch (System.Exception e)
         {
             Debug.LogError("Error encountered when trying to generate song.ini. " + e.Message);
-        }
-        finally
-        {
-            parser.Close();
         }
     }
 
@@ -438,7 +419,7 @@ public class Export : DisplayMenu {
         return newAudioName;
     }
 
-    IEnumerator ExportCHPackage(string destFolderPath, Song song, float songLengthSeconds, ExportOptions exportOptions)
+    IEnumerator ExportCHPackage(string destFolderPath, Song song, ExportOptions exportOptions)
     {
         Song newSong = new Song(song);
         LoadingTasksManager tasksManager = editor.services.loadingTasksManager;
@@ -516,7 +497,7 @@ public class Export : DisplayMenu {
             ChartWriter.ErrorReport errorReport;
 
             new ChartWriter(chartOutputFile).Write(newSong, exportOptions, out errorReport);
-            GenerateSongIni(destFolderPath, newSong, songLengthSeconds, true);
+            GenerateSongIni(destFolderPath, newSong);
 
             if (errorReport.HasErrorsOrWarnings)
             {

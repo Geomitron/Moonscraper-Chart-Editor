@@ -106,6 +106,12 @@ namespace MoonscraperEngine.Audio
             return (float)Bass.BASS_ChannelBytes2Seconds(audioHandle, ChannelLengthInBytes());
         }
 
+        // The channel's length in milliseconds, rounded up
+        public int ChannelLengthInMilliseconds()
+        {
+            return (int)System.Math.Ceiling(Bass.BASS_ChannelBytes2Seconds(audioHandle, ChannelLengthInBytes()) * 1000);
+        }
+
         public long ChannelSecondsToBytes(double position)
         {
             return Bass.BASS_ChannelSeconds2Bytes(audioHandle, position);

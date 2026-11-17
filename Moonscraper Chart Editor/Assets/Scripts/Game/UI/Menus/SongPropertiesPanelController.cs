@@ -89,17 +89,17 @@ public class SongPropertiesPanelController : TabMenu
 
         init = true;
         Song song = editor.currentSong;
-        Metadata metaData = song.metaData;
+        SongIni ini = song.iniProperties;
 
         songName.text = song.name;
-        artist.text = metaData.artist;
-        charter.text = metaData.charter;
-        album.text = metaData.album;
-        year.text = metaData.year;
+        artist.text = ini.Get("artist");
+        charter.text = ini.Get("charter");
+        album.text = ini.Get("album");
+        year.text = ini.Get("year");
         offset.text = song.offset.ToString();
-        difficulty.text = metaData.hasDifficulty ? metaData.difficulty.ToString() : string.Empty;
-        genre.text = metaData.genre;
-        mediaType.text = metaData.mediatype;
+        difficulty.text = ini.Get("diff_band");
+        genre.text = ini.Get("genre");
+        mediaType.text = string.Empty;
 
         // Init audio names
         setAudioTextLabels();
@@ -125,18 +125,12 @@ public class SongPropertiesPanelController : TabMenu
         verticalScroll.value = 1;
     }
 
-    void Apply()
-    {
-        editor.currentSong.name = songName.text;
-        editor.currentSong.metaData.artist = artist.text;
-    }
-
     public void setSongProperties()
     {
         if (!init)
         {
             Song song = editor.currentSong;
-            Metadata metaData = song.metaData;
+            SongIni ini = song.iniProperties;
 
             if (!song.name.Equals(songName.text))
             {
@@ -145,10 +139,10 @@ public class SongPropertiesPanelController : TabMenu
                 editor.RepaintWindowText();
             }
 
-            metaData.artist = artist.text;
-            metaData.charter = charter.text;
-            metaData.album = album.text;
-            metaData.year = year.text;
+            ini.Set("artist", artist.text);
+            ini.Set("charter", charter.text);
+            ini.Set("album", album.text);
+            ini.Set("year", year.text);
 
             try
             {
@@ -159,17 +153,8 @@ public class SongPropertiesPanelController : TabMenu
                 song.offset = 0;
             }
 
-            try
-            {
-                metaData.difficulty = int.Parse(difficulty.text);
-            }
-            catch
-            {
-                metaData.difficulty = Metadata.NoDifficulty;
-            }
-
-            metaData.genre = genre.text;
-            metaData.mediatype = mediaType.text;
+            ini.Set("diff_band", difficulty.text);
+            ini.Set("genre", genre.text);
 
             if (editor.currentSong.manualLength.HasValue)   // if we were already using the manual length
             {
@@ -183,12 +168,12 @@ public class SongPropertiesPanelController : TabMenu
     public void UpdateIni()
     {
         Song song = editor.currentSong;
-        song.iniProperties = SongIniFunctions.SongIniFromString(customIniSettings.text);
+        song.iniProperties = new SongIni(SongIniKeys.Parse(customIniSettings.text));
     }
 
     void UpdateIniTextFromSongProperties()
     {
-        customIniSettings.text = SongIniFunctions.IniTextFromSongProperties(editor.currentSong.iniProperties);
+        customIniSettings.text = SongIniKeys.IniText(editor.currentSong.iniProperties.pairs);
     }
 
     public void RefreshIniDisplay()
@@ -201,21 +186,11 @@ public class SongPropertiesPanelController : TabMenu
     public void PopulateIniFromGeneralSettings()
     {
         RefreshIniDisplay();
-        SongIniFunctions.PopulateIniWithSongMetadata(editor.currentSong, editor.currentSong.iniProperties, editor.currentSongLength);
-        UpdateIniTextFromSongProperties();
-        ChartEditor.isDirty = true;
     }
 
     public void AddCloneHeroIniTags()
     {
         RefreshIniDisplay();
-
-        var song = editor.currentSong;
-        var iniParser = song.iniProperties;
-
-        SongIniFunctions.AddCloneHeroIniTags(song, iniParser, editor.currentSongLength);
-        UpdateIniTextFromSongProperties();
-        ChartEditor.isDirty = true;
     }
 
     public void OnIniInputValueChanged()

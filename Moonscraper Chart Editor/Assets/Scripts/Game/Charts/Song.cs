@@ -15,18 +15,19 @@ namespace MoonscraperChartEditor.Song
     public class Song
     {
         // Song properties
+        // The chart's [Song] values as it was read, which fill in what song.ini doesn't set when the song is opened
         public Metadata metaData = new Metadata();
-        public INIParser iniProperties = new INIParser();
+        public SongIni iniProperties = new SongIni();
 
         public string name
         {
             get
             {
-                return metaData.name;
+                return iniProperties.Get("name");
             }
             set
             {
-                metaData.name = value;
+                iniProperties.Set("name", value);
             }
         }
         public float resolution = SongConfig.STANDARD_BEAT_RESOLUTION;
@@ -199,9 +200,7 @@ namespace MoonscraperChartEditor.Song
                 audioLocations[i] = song.audioLocations[i];
             }
 
-            iniProperties = new INIParser();
-            iniProperties.OpenFromString(string.Empty);
-            iniProperties.WriteValue(song.iniProperties);
+            iniProperties = new SongIni(song.iniProperties);
         }
 
         ~Song()

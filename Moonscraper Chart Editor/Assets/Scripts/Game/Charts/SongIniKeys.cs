@@ -72,24 +72,53 @@ public static class SongIniKeys
         return value == string.Empty || (value == "-1" && IsNumberKey(key));
     }
 
+    // Keys whose value is True or False
+    static readonly HashSet<string> s_boolKeys = new HashSet<string>
+    {
+        "modchart", "explicit_lyrics", "video_loop", "clean_vocals", "eighthnote_hopo", "five_lane_drums", "pro_drums",
+    };
+
+    // The older name of each key that has one, which games read only when the file doesn't have the key, whatever its value
+    static readonly KeyValuePair<string, string>[] s_olderNames =
+    {
+        new KeyValuePair<string, string>("charter", "frets"),
+        new KeyValuePair<string, string>("album_track", "track"),
+        new KeyValuePair<string, string>("pro_drums", "pro_drum"),
+        new KeyValuePair<string, string>("multiplier_note", "star_power_note"),
+    };
+
+    public static bool IsBoolKey(string key)
+    {
+        return s_boolKeys.Contains(key.Trim().ToLowerInvariant());
+    }
+
     /// <summary>
-    /// The keys to write: each key that has a value once, named in lowercase, with its first value as games read it; the keys of
-    /// <see cref="RecommendedOrder"/> first, in that order, then the other keys in the order given.
+    /// The keys to write: each key that has a value once, named in lowercase, with the value of its last line, which games read; the
+    /// keys of <see cref="RecommendedOrder"/> first, in that order, then the other keys in the order of their last lines. A True or
+    /// False value is written as True or False.
     /// </summary>
     public static List<KeyValuePair<string, string>> Normalize(IEnumerable<KeyValuePair<string, string>> pairs)
     {
-        var known = new List<KeyValuePair<string, string>>();
-        var other = new List<KeyValuePair<string, string>>();
-        var written = new HashSet<string>();
-
+        var lastValues = new List<KeyValuePair<string, string>>();
         foreach (var pair in pairs)
         {
             string key = pair.Key == null ? string.Empty : pair.Key.Trim().ToLowerInvariant();
-            if (key == string.Empty || IsUnset(key, pair.Value) || !written.Add(key))
+            if (key == string.Empty)
                 continue;
 
-            var normalized = new KeyValuePair<string, string>(key, pair.Value.Trim());
-            if (s_rank.ContainsKey(key))
+            lastValues.RemoveAll(p => p.Key == key);
+            lastValues.Add(new KeyValuePair<string, string>(key, pair.Value == null ? string.Empty : pair.Value.Trim()));
+        }
+
+        var known = new List<KeyValuePair<string, string>>();
+        var other = new List<KeyValuePair<string, string>>();
+        foreach (var pair in lastValues)
+        {
+            if (IsUnset(pair.Key, pair.Value))
+                continue;
+
+            var normalized = new KeyValuePair<string, string>(pair.Key, FormatValue(pair.Key, pair.Value));
+            if (s_rank.ContainsKey(pair.Key))
                 known.Add(normalized);
             else
                 other.Add(normalized);
@@ -101,8 +130,150 @@ public static class SongIniKeys
         return known;
     }
 
+    static string FormatValue(string key, string value)
+    {
+        bool? b = ParseBool(value);
+        return s_boolKeys.Contains(key) && b.HasValue ? (b.Value ? "True" : "False") : value;
+    }
+
+    static bool? ParseBool(string value)
+    {
+        value = value.Trim();
+        if (value == "1" || value.Equals("true", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (value == "0" || value.Equals("false", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return null;
+    }
+
+    static int? ParseInteger(string value)
+    {
+        int number;
+        return int.TryParse(value.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out number) ? number : (int?)null;
+    }
+
+    static bool IsAtMostZero(string value)
+    {
+        int? number = ParseInteger(value);
+        return number.HasValue && number.Value <= 0;
+    }
+
+    static bool IsPositiveInteger(string value)
+    {
+        int? number = ParseInteger(value);
+        return number.HasValue && number.Value > 0;
+    }
+
+    static bool IsZero(string value)
+    {
+        double number;
+        return double.TryParse(value.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out number) && number == 0;
+    }
+
     /// <summary>
-    /// The song.ini file for these keys, as <see cref="Normalize"/> orders them, with " = " between each key and its value.
+    /// The [song] section's lines of a song.ini file, in the file's order, read as games read them: section names and keys in any
+    /// letter case, and lines starting with ; or # skipped.
+    /// </summary>
+    public static List<KeyValuePair<string, string>> Parse(string text)
+    {
+        var pairs = new List<KeyValuePair<string, string>>();
+        bool inSong = false;
+
+        foreach (string rawLine in text.TrimStart('﻿').Split('\n'))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith(";") || line.StartsWith("#"))
+                continue;
+
+            if (line.StartsWith("[") && line.EndsWith("]"))
+            {
+                inSong = line.Substring(1, line.Length - 2).Trim().Equals("song", StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
+
+            int equals = line.IndexOf('=');
+            if (inSong && equals >= 0)
+                pairs.Add(new KeyValuePair<string, string>(line.Substring(0, equals).Trim().ToLowerInvariant(), line.Substring(equals + 1).Trim()));
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// The keys of a song.ini that's opened, as <see cref="Normalize"/> orders them, without the values that change nothing: an older
+    /// key name is read as its current one, and default values that games read the same as no line, and Clone Hero's 16000 track
+    /// numbers, are left out. Moonscraper saves a .chart, so the values that change nothing in a .chart are left out too.
+    /// </summary>
+    public static List<KeyValuePair<string, string>> NormalizeOpened(IEnumerable<KeyValuePair<string, string>> pairs)
+    {
+        var lines = new List<KeyValuePair<string, string>>();
+        foreach (var pair in pairs)
+            lines.Add(new KeyValuePair<string, string>((pair.Key ?? string.Empty).Trim().ToLowerInvariant(), pair.Value ?? string.Empty));
+
+        foreach (var names in s_olderNames)
+        {
+            bool hasKey = lines.Exists(p => p.Key == names.Key);
+            for (int i = 0; i < lines.Count; ++i)
+            {
+                if (lines[i].Key == names.Value)
+                    lines[i] = new KeyValuePair<string, string>(hasKey ? string.Empty : names.Key, lines[i].Value);
+            }
+        }
+
+        var normalized = Normalize(lines);
+        string hopoFrequency = null;
+        foreach (var pair in normalized)
+        {
+            if (pair.Key == "hopo_frequency")
+                hopoFrequency = pair.Value;
+        }
+
+        normalized.RemoveAll(pair => ChangesNothing(pair.Key, pair.Value, hopoFrequency));
+        return normalized;
+    }
+
+    // Whether games read the song the same without this line (scan-chart's defaultIniValue check), in a .chart
+    static bool ChangesNothing(string key, string value, string hopoFrequency)
+    {
+        switch (key)
+        {
+            case "delay":
+            case "video_start_time":
+            case "rating":
+            case "tuning_offset_cents":
+                return IsZero(value);
+
+            case "hopo_frequency":
+            case "sustain_cutoff_threshold":
+            case "chord_snap_threshold":
+                return IsAtMostZero(value);
+
+            case "eighthnote_hopo":
+                return ParseBool(value) == false || (hopoFrequency != null && IsPositiveInteger(hopoFrequency));
+
+            case "modchart":
+            case "explicit_lyrics":
+            case "video_loop":
+            case "clean_vocals":
+            case "pro_drums":
+            case "five_lane_drums":
+                return ParseBool(value) == false;
+
+            case "album_track":
+            case "playlist_track":
+                return value == "16000";
+
+            // A .chart has no star power note number, and no game reads end_events
+            case "multiplier_note":
+            case "end_events":
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The song.ini file for these keys, as <see cref="Normalize"/> writes them, with " = " between each key and its value.
     /// </summary>
     public static string IniText(IEnumerable<KeyValuePair<string, string>> pairs)
     {

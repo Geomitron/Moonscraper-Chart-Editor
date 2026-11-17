@@ -19,6 +19,7 @@ public class Globals : MonoBehaviour {
     public static readonly string LINE_ENDING = "\r\n";
     public const string TABSPACE = "  ";
     public static string autosaveLocation;
+    public static string autosaveIniLocation;           // The autosave's song.ini
     public static string sngAutosaveLocation;           // What the autosave needs to restore a song opened from a .sng
     public static string sngSaveJournalLocation;        // An unfinished .sng save
     static string workingDirectory = string.Empty;
@@ -80,6 +81,7 @@ public class Globals : MonoBehaviour {
         Application.runInBackground = true;
 
         autosaveLocation = Application.persistentDataPath + "/autosave.chart";
+        autosaveIniLocation = Application.persistentDataPath + "/autosave_song.ini";
         sngAutosaveLocation = Application.persistentDataPath + "/autosave_sng.json";
         sngSaveJournalLocation = Application.persistentDataPath + "/sng_save.journal";
 
@@ -248,6 +250,9 @@ public class Globals : MonoBehaviour {
             File.Delete(autosaveLocation);
             Debug.Log("Autosave deleted");
         }
+
+        if (File.Exists(autosaveIniLocation))
+            File.Delete(autosaveIniLocation);
 
         if (File.Exists(sngAutosaveLocation))
             File.Delete(sngAutosaveLocation);
