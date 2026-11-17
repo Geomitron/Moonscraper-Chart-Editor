@@ -336,7 +336,38 @@ namespace MoonscraperChartEditor.Song.IO
                 saveString += s_chartSectionFooter;
             }
 
+            // The autosave's [Song] section has the audio files, which recovering the song needs
+            if (!exportOptions.writeAudioLocations)
+                saveString = KeepOpenedChart(saveString, song.openedChartText);
+
             return saveString;
+        }
+
+        // Games and leaderboards identify a chart by its file's hash, so leaving metadata out of [Song] mustn't change a chart file
+        // that wouldn't change otherwise: if everything after [Song] is as the song was opened, the chart is written as it was opened.
+        static string KeepOpenedChart(string chartText, string openedChartText)
+        {
+            if (openedChartText == null)
+                return chartText;
+
+            int bodyStart = SongSectionEnd(chartText);
+            int openedBodyStart = SongSectionEnd(openedChartText);
+            int bodyLength = chartText.Length - bodyStart;
+            if (bodyStart < 0 || openedBodyStart < 0 || openedChartText.Length - openedBodyStart != bodyLength)
+                return chartText;
+
+            return string.CompareOrdinal(chartText, bodyStart, openedChartText, openedBodyStart, bodyLength) == 0 ? openedChartText : chartText;
+        }
+
+        // Where the text after a chart's [Song] section starts, or -1 if the chart doesn't start with one as Moonscraper writes it
+        static int SongSectionEnd(string chartText)
+        {
+            if (!chartText.StartsWith(s_chartHeaderSong, StringComparison.Ordinal))
+                return -1;
+
+            string footerLine = Globals.LINE_ENDING + s_chartSectionFooter;
+            int footer = chartText.IndexOf(footerLine, s_chartHeaderSong.Length - Globals.LINE_ENDING.Length, StringComparison.Ordinal);
+            return footer < 0 ? -1 : footer + footerLine.Length;
         }
 
         // song.ini holds the song's metadata, so [Song] holds only what reading the chart needs, and Moonscraper's own length

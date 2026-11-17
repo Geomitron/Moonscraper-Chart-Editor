@@ -153,16 +153,8 @@ namespace MoonscraperChartEditor.Song.IO
 
                 if (standardChartFormat || extension == MsceIOHelper.FileExtention)
                 {
-                    Song song = new Song();
-
                     ChartIOHelper.FileSubType fileLoadType = standardChartFormat ? ChartIOHelper.FileSubType.Default : ChartIOHelper.FileSubType.MoonscraperPropriety;
-
-                    using (StreamReader sr = File.OpenText(filepath))
-                    {
-                        LoadChart(song, sr, new FileInfo(filepath).Directory.FullName, fileLoadType);
-                    }
-
-                    return song;
+                    return ReadChartContents(File.ReadAllBytes(filepath), new FileInfo(filepath).Directory.FullName, fileLoadType);
                 }
                 else
                 {
@@ -184,19 +176,29 @@ namespace MoonscraperChartEditor.Song.IO
         {
             try
             {
-                Song song = new Song();
-
-                using (StreamReader sr = new StreamReader(new MemoryStream(contents), System.Text.Encoding.UTF8, true))
-                {
-                    LoadChart(song, sr, audioDirectory, ChartIOHelper.FileSubType.Default);
-                }
-
-                return song;
+                return ReadChartContents(contents, audioDirectory, ChartIOHelper.FileSubType.Default);
             }
             catch (System.Exception e)
             {
                 throw new Exception("Could not open file: " + e.Message);
             }
+        }
+
+        static Song ReadChartContents(byte[] contents, string audioDirectory, ChartIOHelper.FileSubType fileLoadType)
+        {
+            Song song = new Song();
+
+            using (StreamReader sr = new StreamReader(new MemoryStream(contents), System.Text.Encoding.UTF8, true))
+            {
+                LoadChart(song, sr, audioDirectory, fileLoadType);
+            }
+
+            using (StreamReader sr = new StreamReader(new MemoryStream(contents), System.Text.Encoding.UTF8, true))
+            {
+                song.openedChartText = sr.ReadToEnd();
+            }
+
+            return song;
         }
 
         static void LoadChart(Song song, StreamReader sr, string audioDirectory, ChartIOHelper.FileSubType fileLoadType)
