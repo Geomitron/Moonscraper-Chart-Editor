@@ -18,8 +18,8 @@ namespace MoonscraperChartEditor.Song
         // The chart's [Song] values as it was read, which fill in what song.ini doesn't set when the song is opened
         public Metadata metaData = new Metadata();
         public SongIni iniProperties = new SongIni();
-        // The .chart text the song was opened from, or null. Saving writes it as it was when the rest of the chart is unchanged.
-        public string openedChartText = null;
+        // The .chart file the song was opened from, or null. Saving writes it as it was when the rest of the chart is unchanged.
+        public byte[] openedChartBytes = null;
 
         public string name
         {
@@ -203,7 +203,7 @@ namespace MoonscraperChartEditor.Song
             }
 
             iniProperties = new SongIni(song.iniProperties);
-            openedChartText = song.openedChartText;
+            openedChartBytes = song.openedChartBytes;
         }
 
         ~Song()

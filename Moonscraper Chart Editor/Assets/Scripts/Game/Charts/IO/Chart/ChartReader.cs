@@ -193,10 +193,7 @@ namespace MoonscraperChartEditor.Song.IO
                 LoadChart(song, sr, audioDirectory, fileLoadType);
             }
 
-            using (StreamReader sr = new StreamReader(new MemoryStream(contents), System.Text.Encoding.UTF8, true))
-            {
-                song.openedChartText = sr.ReadToEnd();
-            }
+            song.openedChartBytes = contents;
 
             return song;
         }
