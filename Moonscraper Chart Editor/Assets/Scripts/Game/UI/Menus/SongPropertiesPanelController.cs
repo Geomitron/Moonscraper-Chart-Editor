@@ -7,24 +7,26 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System;
 using MoonscraperEngine;
 using MoonscraperChartEditor.Song;
+using Row = SongPropertiesRows.Row;
 
 public class SongPropertiesPanelController : TabMenu
 {
-    public Scrollbar verticalScroll;
+    [Header("Song Settings")]
+    public Toggle showAllKeysToggle;
+    public ScrollRect rowsScrollRect;
+    public RectTransform rowsContent;
+    public MS_TMPro_InputField iniPreview;
 
-    [Header("General Settings")]
-    public InputField songName;
-    public InputField artist;
-    public InputField charter;
-    public InputField album;
-    public InputField year;
-    public InputField offset;
-    public InputField difficulty;
-    public InputField genre;
-    public InputField mediaType;
+    [Header("Row Templates")]
+    public Text labelTemplate;
+    public InputField inputTemplate;
+    public Toggle toggleTemplate;
+    public Dropdown dropdownTemplate;
+    public Button buttonTemplate;
 
     [Header("Audio Settings")]
     public Text musicStream;
@@ -39,29 +41,30 @@ public class SongPropertiesPanelController : TabMenu
 	public Text drum4Stream;
     public Text crowdStream;
 
-    [Header("Advanced Settings")]
-    public MS_TMPro_InputField customIniSettings;
-
-    bool init = false;
-
-    TimeSpan customTime = new TimeSpan();
-
     static readonly string[] validAudioExtensions = { "ogg", "wav", "mp3", "opus" };
     readonly ExtensionFilter audioExFilter = new ExtensionFilter("Audio files", validAudioExtensions);
 
     Dictionary<Song.AudioInstrument, Text> m_audioStreamTextLookup;
-    readonly string[] INI_SECTION_HEADER = { "Song", "song" };
 
-    protected void Start()
+    // "Show all keys" stays as the charter left it while Moonscraper is open
+    static bool s_showAllKeys = false;
+
+    static readonly Color c_groupColor = new Color(0.16f, 0.16f, 0.16f, 0.9f);
+    static readonly Color c_hintColor = new Color(0.72f, 0.72f, 0.72f);
+    static readonly Color c_subheadingColor = new Color(0.68f, 0.68f, 0.68f);
+    static readonly Color c_recommendedEmptyColor = new Color(1f, 0.914f, 0.722f);
+    const float c_labelWidth = 212;
+    const float c_numberWidth = 80;
+    const float c_controlHeight = 24;
+
+    SongPropertiesRows.ChartFacts m_chartFacts;
+    HashSet<string> m_rowKeys;
+    bool m_settingShowAllKeys = false;
+
+    protected override void Awake()
     {
-        offset.onValidateInput = LocalesManager.ValidateDecimalInput;
-
-        songName.onValidateInput = ValidateStringMetadataInput;
-        artist.onValidateInput = ValidateStringMetadataInput;
-        charter.onValidateInput = ValidateStringMetadataInput;
-        album.onValidateInput = ValidateStringMetadataInput;
-        genre.onValidateInput = ValidateStringMetadataInput;
-        mediaType.onValidateInput = ValidateStringMetadataInput;
+        base.Awake();
+        showAllKeysToggle.onValueChanged.AddListener(OnShowAllKeysChanged);
     }
 
     protected override void OnEnable()
@@ -85,123 +88,508 @@ public class SongPropertiesPanelController : TabMenu
 
         bool edit = ChartEditor.isDirty;
 
+        m_chartFacts = SongPropertiesRows.ChartFacts.Of(editor.currentSong);
+        if (m_rowKeys == null)
+            m_rowKeys = new HashSet<string>(SongPropertiesRows.RowKeys());
+
+        m_settingShowAllKeys = true;
+        showAllKeysToggle.isOn = s_showAllKeys;
+        m_settingShowAllKeys = false;
+        BuildRows();
+
         base.OnEnable();
-
-        init = true;
-        Song song = editor.currentSong;
-        SongIni ini = song.iniProperties;
-
-        songName.text = song.name;
-        artist.text = ini.Get("artist");
-        charter.text = ini.Get("charter");
-        album.text = ini.Get("album");
-        year.text = ini.Get("year");
-        offset.text = song.offset.ToString();
-        difficulty.text = ini.Get("diff_band");
-        genre.text = ini.Get("genre");
-        mediaType.text = string.Empty;
 
         // Init audio names
         setAudioTextLabels();
-        init = false;
-
-        customTime = TimeSpan.FromSeconds(editor.currentSongLength);
-
-        UpdateIniTextFromSongProperties();
 
         ChartEditor.isDirty = edit;
         StartCoroutine(ScrollSetDelay());
     }
 
-    protected override void OnDisable()
-    {
-        UpdateIni();
-        base.OnDisable();
-    }
-
     IEnumerator ScrollSetDelay()
     {
         yield return null;
-        verticalScroll.value = 1;
+        rowsScrollRect.verticalNormalizedPosition = 1;
     }
 
-    public void setSongProperties()
+    void OnShowAllKeysChanged(bool showAll)
     {
-        if (!init)
+        if (m_settingShowAllKeys)
+            return;
+
+        s_showAllKeys = showAll;
+        BuildRows();
+    }
+
+    #region Song rows
+
+    void BuildRows()
+    {
+        foreach (Transform child in rowsContent)
         {
-            Song song = editor.currentSong;
-            SongIni ini = song.iniProperties;
+            child.gameObject.SetActive(false);
+            Destroy(child.gameObject);
+        }
 
-            if (!song.name.Equals(songName.text))
+        defaultSelectable = null;
+        SongIni ini = editor.currentSong.iniProperties;
+
+        foreach (SongPropertiesRows.Group group in SongPropertiesRows.Groups)
+        {
+            var otherKeys = new List<string>();
+            if (group.otherKeys)
             {
-                song.name = songName.text;
-                editor.uiServices.editorPanels.displayProperties.UpdateSongNameText();
-                editor.RepaintWindowText();
+                foreach (var pair in ini.pairs)
+                {
+                    if (!m_rowKeys.Contains(pair.Key))
+                        otherKeys.Add(pair.Key);
+                }
             }
 
-            ini.Set("artist", artist.text);
-            ini.Set("charter", charter.text);
-            ini.Set("album", album.text);
-            ini.Set("year", year.text);
-
-            try
+            var shownRows = new List<Row>();
+            string pendingSubheading = null;
+            var subheadings = new Dictionary<Row, string>();
+            foreach (Row row in group.rows)
             {
-                song.offset = float.Parse(offset.text);
+                if (row.subheading != null)
+                {
+                    pendingSubheading = row.subheading;
+                    continue;
+                }
+
+                if (!SongPropertiesRows.IsVisible(row, HasValue(row), s_showAllKeys, m_chartFacts))
+                    continue;
+
+                if (pendingSubheading != null)
+                {
+                    subheadings[row] = pendingSubheading;
+                    pendingSubheading = null;
+                }
+
+                shownRows.Add(row);
             }
-            catch
+
+            if (shownRows.Count == 0 && otherKeys.Count == 0 && !(group.otherKeys && s_showAllKeys))
+                continue;
+
+            AddGroupHeading(group.title);
+            foreach (Row row in shownRows)
             {
-                song.offset = 0;
+                string subheading;
+                if (subheadings.TryGetValue(row, out subheading))
+                    AddSubheading(subheading);
+
+                AddRow(row);
             }
 
-            ini.Set("diff_band", difficulty.text);
-            ini.Set("genre", genre.text);
+            foreach (string key in otherKeys)
+                AddOtherKeyRow(key);
 
-            if (editor.currentSong.manualLength.HasValue)   // if we were already using the manual length
-            {
-                editor.currentSong.manualLength = (float)customTime.TotalSeconds;
-            }
+            if (group.otherKeys && s_showAllKeys)
+                AddNewKeyRow();
+        }
 
-            ChartEditor.isDirty = true;
+        RefreshIniPreview();
+    }
+
+    bool HasValue(Row row)
+    {
+        Song song = editor.currentSong;
+        switch (row.input)
+        {
+            case SongPropertiesRows.Input.DrumType:
+                return SongPropertiesRows.IniDrumType(song.iniProperties).HasValue;
+            case SongPropertiesRows.Input.Seconds:
+                if (row.key == "delay")
+                    return Mathf.RoundToInt(song.offset * 1000) != 0;
+                break;
+        }
+
+        return song.iniProperties.Get(row.key) != string.Empty;
+    }
+
+    RectTransform AddLayoutObject(string name, Transform parent)
+    {
+        var gameObject = new GameObject(name, typeof(RectTransform));
+        gameObject.transform.SetParent(parent, false);
+        return (RectTransform)gameObject.transform;
+    }
+
+    static LayoutElement SetLayoutSize(Component component, float preferredWidth, float preferredHeight, float flexibleWidth = 0)
+    {
+        LayoutElement layout = component.GetComponent<LayoutElement>();
+        if (!layout)
+            layout = component.gameObject.AddComponent<LayoutElement>();
+
+        layout.preferredWidth = preferredWidth;
+        layout.minWidth = preferredWidth;
+        layout.preferredHeight = preferredHeight;
+        layout.minHeight = preferredHeight;
+        layout.flexibleWidth = flexibleWidth;
+        return layout;
+    }
+
+    Text AddText(string text, Transform parent, int fontSize, Color color, FontStyle fontStyle = FontStyle.Normal)
+    {
+        Text label = Instantiate(labelTemplate, parent, false);
+        label.gameObject.SetActive(true);
+        label.text = text;
+        label.fontSize = fontSize;
+        label.color = color;
+        label.fontStyle = fontStyle;
+        label.alignment = TextAnchor.MiddleLeft;
+        label.horizontalOverflow = HorizontalWrapMode.Wrap;
+        label.verticalOverflow = VerticalWrapMode.Overflow;
+        label.resizeTextForBestFit = false;
+        return label;
+    }
+
+    void AddGroupHeading(string title)
+    {
+        RectTransform heading = AddLayoutObject(title, rowsContent);
+        heading.gameObject.AddComponent<Image>().color = c_groupColor;
+        var layout = heading.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(8, 8, 4, 4);
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        AddText(title, heading, 15, Color.white, FontStyle.Bold);
+    }
+
+    void AddSubheading(string title)
+    {
+        RectTransform subheading = AddLayoutObject(title, rowsContent);
+        var layout = subheading.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(8, 8, 6, 0);
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        AddText(title.ToUpperInvariant(), subheading, 11, c_subheadingColor);
+    }
+
+    // A row: its label with the hint under it, then its control
+    RectTransform AddRowLayout(string name, string label, string hint)
+    {
+        RectTransform row = AddLayoutObject(name, rowsContent);
+        var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(8, 8, 3, 3);
+        layout.spacing = 6;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+
+        RectTransform labels = AddLayoutObject("Labels", row);
+        var labelsLayout = labels.gameObject.AddComponent<VerticalLayoutGroup>();
+        labelsLayout.childControlWidth = true;
+        labelsLayout.childControlHeight = true;
+        labelsLayout.childForceExpandWidth = true;
+        labelsLayout.childForceExpandHeight = false;
+        labelsLayout.childAlignment = TextAnchor.MiddleLeft;
+        SetLayoutSize(labels, c_labelWidth, -1);
+
+        AddText(label, labels, 14, Color.white);
+        if (!string.IsNullOrEmpty(hint))
+            AddText(hint, labels, 11, c_hintColor);
+
+        return row;
+    }
+
+    InputField AddInput(Transform row, string text, float width)
+    {
+        InputField input = Instantiate(inputTemplate, row, false);
+        input.gameObject.SetActive(true);
+        input.onValueChanged.RemoveAllListeners();
+        input.onEndEdit.RemoveAllListeners();
+        SetPlaceholder(input, string.Empty);
+        input.text = text;
+        if (width > 0)
+            SetLayoutSize(input, width, c_controlHeight);
+        else
+            SetLayoutSize(input, 0, c_controlHeight, 1);
+
+        return input;
+    }
+
+    Button AddButton(Transform row, string text, UnityEngine.Events.UnityAction onClick)
+    {
+        Button button = Instantiate(buttonTemplate, row, false);
+        button.gameObject.SetActive(true);
+        button.onClick.RemoveAllListeners();
+        button.onClick.AddListener(onClick);
+        Text label = button.GetComponentInChildren<Text>();
+        label.text = text;
+        label.fontSize = 12;
+        SetLayoutSize(button, label.preferredWidth + 16, c_controlHeight);
+        return button;
+    }
+
+    void AddFlexibleSpace(Transform row)
+    {
+        SetLayoutSize(AddLayoutObject("Space", row), 0, 0, 1);
+    }
+
+    void AddRow(Row row)
+    {
+        bool recommended = SongPropertiesRows.IsRecommended(row, m_chartFacts);
+        RectTransform rowObject = AddRowLayout(row.key, row.label, SongPropertiesRows.HintText(row, recommended));
+        SongIni ini = editor.currentSong.iniProperties;
+
+        switch (row.input)
+        {
+            case SongPropertiesRows.Input.Bool:
+                {
+                    Toggle toggle = Instantiate(toggleTemplate, rowObject, false);
+                    toggle.gameObject.SetActive(true);
+                    toggle.onValueChanged.RemoveAllListeners();
+                    toggle.isOn = ini.Get(row.key) == "True";
+                    toggle.onValueChanged.AddListener(isOn => SetIniValue(row.key, isOn ? "True" : string.Empty));
+                    SetLayoutSize(toggle, 20, 20);
+                    AddFlexibleSpace(rowObject);
+                    break;
+                }
+
+            case SongPropertiesRows.Input.Select:
+                AddSelectDropdown(row, rowObject);
+                break;
+
+            case SongPropertiesRows.Input.DrumType:
+                AddDrumTypeDropdown(rowObject);
+                break;
+
+            case SongPropertiesRows.Input.Seconds:
+                {
+                    InputField input = AddInput(rowObject, SecondsText(row), c_numberWidth);
+                    input.onValidateInput = LocalesManager.ValidateDecimalInput;
+                    MarkRecommendedEmpty(input, recommended);
+                    input.onValueChanged.AddListener(text =>
+                    {
+                        SetSeconds(row, text);
+                        MarkRecommendedEmpty(input, recommended);
+                    });
+
+                    if (row.playbackPositionButton)
+                        AddButton(rowObject, "Use current playback position", () => input.text = FormatSeconds(CurrentPlaybackPosition()));
+
+                    AddFlexibleSpace(rowObject);
+                    break;
+                }
+
+            default:
+                {
+                    bool number = row.input == SongPropertiesRows.Input.Integer;
+                    InputField input = AddInput(rowObject, ini.Get(row.key), number ? c_numberWidth : -1);
+                    if (number)
+                        input.contentType = InputField.ContentType.IntegerNumber;
+                    else
+                        input.onValidateInput = ValidateStringMetadataInput;
+
+                    MarkRecommendedEmpty(input, recommended);
+                    input.onValueChanged.AddListener(text =>
+                    {
+                        SetIniValue(row.key, text);
+                        MarkRecommendedEmpty(input, recommended);
+                        if (row.key == "name")
+                            UpdateSongNameDisplays();
+                    });
+
+                    if (number)
+                        AddFlexibleSpace(rowObject);
+                    if (row.key == "name")
+                        defaultSelectable = input;
+                    break;
+                }
         }
     }
 
-    public void UpdateIni()
+    void AddSelectDropdown(Row row, Transform rowObject)
     {
-        Song song = editor.currentSong;
-        song.iniProperties = new SongIni(SongIniKeys.Parse(customIniSettings.text));
+        string value = editor.currentSong.iniProperties.Get(row.key);
+        var values = new List<string>() { string.Empty };
+        var options = new List<string>() { "Not set" };
+        for (int i = 0; i < row.optionValues.Length; ++i)
+        {
+            values.Add(row.optionValues[i]);
+            options.Add(row.optionLabels != null ? row.optionLabels[i] : row.optionValues[i]);
+        }
+
+        // A value the file sets that isn't one of the options stays as it is
+        if (!values.Contains(value))
+        {
+            values.Add(value);
+            options.Add(value);
+        }
+
+        AddDropdown(rowObject, options, values.IndexOf(value), index => SetIniValue(row.key, values[index]));
     }
 
-    void UpdateIniTextFromSongProperties()
+    void AddDrumTypeDropdown(Transform rowObject)
     {
-        customIniSettings.text = SongIniKeys.IniText(editor.currentSong.iniProperties.pairs);
+        SongIni ini = editor.currentSong.iniProperties;
+        SongPropertiesRows.DrumType notesType = m_chartFacts.notesDrumType;
+        SongPropertiesRows.DrumType? iniType = SongPropertiesRows.IniDrumType(ini);
+
+        var types = new List<SongPropertiesRows.DrumType?>() { null };
+        var options = new List<string>() { "From the notes (" + SongPropertiesRows.DrumTypeNames[(int)notesType] + ")" };
+        foreach (SongPropertiesRows.DrumType type in EnumX<SongPropertiesRows.DrumType>.Values)
+        {
+            // Setting the type the notes show changes nothing, so it's a choice only when the file sets it
+            if (type == SongPropertiesRows.DrumType.FourLane || (type == notesType && iniType != type))
+                continue;
+
+            types.Add(type);
+            options.Add(SongPropertiesRows.DrumTypeNames[(int)type]);
+        }
+
+        AddDropdown(rowObject, options, Math.Max(0, types.IndexOf(iniType)), index =>
+        {
+            SetIniValue("pro_drums", types[index] == SongPropertiesRows.DrumType.Pro ? "True" : string.Empty);
+            SetIniValue("five_lane_drums", types[index] == SongPropertiesRows.DrumType.FiveLane ? "True" : string.Empty);
+        });
     }
 
-    public void RefreshIniDisplay()
+    void AddDropdown(Transform rowObject, List<string> options, int selected, UnityEngine.Events.UnityAction<int> onChanged)
     {
-        UpdateIni();
-        UpdateIniTextFromSongProperties();
+        Dropdown dropdown = Instantiate(dropdownTemplate, rowObject, false);
+        dropdown.gameObject.SetActive(true);
+        dropdown.onValueChanged.RemoveAllListeners();
+        dropdown.ClearOptions();
+        dropdown.AddOptions(options);
+        dropdown.value = selected;
+        dropdown.RefreshShownValue();
+        dropdown.onValueChanged.AddListener(onChanged);
+        SetLayoutSize(dropdown, 230, c_controlHeight);
+        AddFlexibleSpace(rowObject);
+    }
+
+    void AddOtherKeyRow(string key)
+    {
+        RectTransform rowObject = AddRowLayout(key, key, "Text");
+        // The rows' font draws no underscore, which key names have
+        rowObject.Find("Labels").GetComponentInChildren<Text>().font = inputTemplate.textComponent.font;
+        InputField input = AddInput(rowObject, editor.currentSong.iniProperties.Get(key), -1);
+        input.onValidateInput = ValidateStringMetadataInput;
+        input.onValueChanged.AddListener(text => SetIniValue(key, text));
+        AddButton(rowObject, "X", () =>
+        {
+            editor.currentSong.iniProperties.Remove(key);
+            ChartEditor.isDirty = true;
+            BuildRows();
+        });
+    }
+
+    void AddNewKeyRow()
+    {
+        RectTransform rowObject = AddLayoutObject("New key", rowsContent);
+        var layout = rowObject.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.padding = new RectOffset(8, 8, 3, 6);
+        layout.spacing = 6;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+
+        InputField key = AddInput(rowObject, string.Empty, c_labelWidth);
+        key.onValidateInput = ValidateStringMetadataInput;
+        SetPlaceholder(key, "Key");
+        InputField value = AddInput(rowObject, string.Empty, -1);
+        value.onValidateInput = ValidateStringMetadataInput;
+        SetPlaceholder(value, "Value");
+        AddButton(rowObject, "Add key", () =>
+        {
+            string newKey = key.text.Trim().ToLowerInvariant();
+            if (newKey == string.Empty || newKey.Contains("="))
+                return;
+
+            SetIniValue(newKey, value.text);
+            BuildRows();
+        });
+    }
+
+    static void SetPlaceholder(InputField input, string text)
+    {
+        Text placeholder = input.placeholder as Text;
+        if (placeholder)
+        {
+            placeholder.text = text;
+            placeholder.gameObject.SetActive(true);
+        }
+    }
+
+    static void MarkRecommendedEmpty(InputField input, bool recommended)
+    {
+        Graphic background = input.targetGraphic;
+        if (background)
+            background.color = recommended && input.text.Trim() == string.Empty ? c_recommendedEmptyColor : Color.white;
+    }
+
+    void SetIniValue(string key, string value)
+    {
+        editor.currentSong.iniProperties.Set(key, value);
         ChartEditor.isDirty = true;
+        RefreshIniPreview();
     }
 
-    public void PopulateIniFromGeneralSettings()
+    // A seconds row's box shows seconds; song.ini has milliseconds, and the offset is the song's
+    string SecondsText(Row row)
     {
-        RefreshIniDisplay();
+        if (row.key == "delay")
+            return editor.currentSong.offset == 0 ? string.Empty : FormatSeconds(editor.currentSong.offset);
+
+        int ms;
+        string value = editor.currentSong.iniProperties.Get(row.key);
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out ms))
+            return FormatSeconds(ms / 1000.0f);
+
+        return value;
     }
 
-    public void AddCloneHeroIniTags()
+    void SetSeconds(Row row, string text)
     {
-        RefreshIniDisplay();
+        float seconds;
+        bool isNumber = float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out seconds);
+
+        if (row.key == "delay")
+        {
+            editor.currentSong.offset = isNumber ? seconds : 0;
+            ChartEditor.isDirty = true;
+            RefreshIniPreview();
+            return;
+        }
+
+        string ms = isNumber ? Mathf.RoundToInt(seconds * 1000).ToString(CultureInfo.InvariantCulture) : string.Empty;
+        SetIniValue(row.key, ms);
     }
 
-    public void OnIniInputValueChanged()
+    static string FormatSeconds(float seconds)
     {
-        ChartEditor.isDirty = true;
+        return seconds.ToString("0.###", CultureInfo.CurrentCulture);
     }
 
-    public void OnIniInputEndEdit()
+    // The audio's position at the strikeline, which song.ini's preview times count in
+    float CurrentPlaybackPosition()
     {
-        RefreshIniDisplay();
+        return Mathf.Max(0, editor.currentVisibleTime + editor.currentSong.offset);
     }
+
+    void UpdateSongNameDisplays()
+    {
+        editor.uiServices.editorPanels.displayProperties.UpdateSongNameText();
+        editor.RepaintWindowText();
+    }
+
+    void RefreshIniPreview()
+    {
+        iniPreview.text = SongIniFunctions.SavedText(editor.CopyIniPropertiesForSaving(), editor.currentSong.offset);
+    }
+
+    #endregion
 
     void ClipText(Text text)
     {
@@ -244,6 +632,9 @@ public class SongPropertiesPanelController : TabMenu
                 audioStreamText.text = "No audio";
             }
         }
+
+        // song_length is measured from the audio
+        RefreshIniPreview();
 
         ChartEditor.isDirty = true;
     }
@@ -329,15 +720,10 @@ public class SongPropertiesPanelController : TabMenu
         setAudioTextLabels();
     }
 
-    static readonly HashSet<char> s_metadataBannedChars = new HashSet<char>()
-    {
-        '"',
-        '\n'
-    };
-
+    // song.ini has a key on each line
     public static char ValidateStringMetadataInput(string text, int charIndex, char addedChar)
     {
-        if (s_metadataBannedChars.Contains(addedChar) || char.IsControl(addedChar))
+        if (char.IsControl(addedChar))
         {
             return '\0';
         }

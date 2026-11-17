@@ -88,10 +88,18 @@ public static class SongIniFunctions
     /// </summary>
     public static List<KeyValuePair<string, string>> SavedPairs(Song song)
     {
-        var pairs = new List<KeyValuePair<string, string>>(song.iniProperties.pairs);
+        return SavedPairs(song.iniProperties, song.offset);
+    }
+
+    /// <summary>
+    /// The song.ini keys a save writes from a song's keys and offset.
+    /// </summary>
+    public static List<KeyValuePair<string, string>> SavedPairs(SongIni ini, float offset)
+    {
+        var pairs = new List<KeyValuePair<string, string>>(ini.pairs);
         pairs.RemoveAll(pair => pair.Key == "delay");
 
-        int delayMs = Mathf.RoundToInt(song.offset * 1000);
+        int delayMs = Mathf.RoundToInt(offset * 1000);
         if (delayMs != 0)
             pairs.Add(new KeyValuePair<string, string>("delay", delayMs.ToString(CultureInfo.InvariantCulture)));
 
@@ -104,6 +112,14 @@ public static class SongIniFunctions
     public static string SavedText(Song song)
     {
         return SongIniKeys.IniText(SavedPairs(song));
+    }
+
+    /// <summary>
+    /// The song.ini file a save writes from a song's keys and offset.
+    /// </summary>
+    public static string SavedText(SongIni ini, float offset)
+    {
+        return SongIniKeys.IniText(SavedPairs(ini, offset));
     }
 
     /// <summary>
