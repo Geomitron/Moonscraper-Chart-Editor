@@ -424,6 +424,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     void RegisterSystems()
     {
         _songObjectPoolManager = gameObject.AddComponent<SongObjectPoolManager>();
+        gameObject.AddComponent<DiscordStatus>();
         DrawBeatLines drawBeatLinesSystem = new DrawBeatLines();
 
         RegisterPersistentSystem(State.Editor, new AutoSaveSystem());

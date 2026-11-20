@@ -25,6 +25,7 @@ public class SettingsController : TabMenu
     public Toggle resetAfterPlay;
     public Toggle resetAfterGameplay;
     public Toggle autoValidateSongOnSave;
+    public Toggle discordStatus;
     public Toggle slowdownPitchCorrectionEnabled;
     public Toggle lyricEditorStepSnappingEnabled;
 
@@ -234,6 +235,7 @@ public class SettingsController : TabMenu
         resetAfterPlay.isOn = Globals.gameSettings.resetAfterPlay;
         resetAfterGameplay.isOn = Globals.gameSettings.resetAfterGameplay;
         autoValidateSongOnSave.isOn = Globals.gameSettings.autoValidateSongOnSave;
+        discordStatus.isOn = Globals.gameSettings.discordStatus;
         slowdownPitchCorrectionEnabled.isOn = Globals.gameSettings.slowdownPitchCorrectionEnabled;
         lyricEditorStepSnappingEnabled.isOn = Globals.gameSettings.lyricEditorSettings.stepSnappingEnabled;
 
@@ -322,6 +324,11 @@ public class SettingsController : TabMenu
     public void SetAutoValidateSongOnSave(bool value)
     {
         Globals.gameSettings.autoValidateSongOnSave.value = value;
+    }
+
+    public void SetDiscordStatus(bool value)
+    {
+        Globals.gameSettings.discordStatus.value = value;
     }
 
     public void SetSlowdownPitchCorrectionEnabled(bool value)
