@@ -232,6 +232,7 @@ public class GameSettings
         , resetAfterGameplay
         , autoValidateSongOnSave
         , automaticallyCheckForUpdates
+        , discordStatus
     ;
 
     public IntSaveSetting
@@ -310,6 +311,7 @@ public class GameSettings
         resetAfterGameplay = new BoolSaveSetting(SECTION_NAME_SETTINGS, "Reset After Gameplay", false);
         autoValidateSongOnSave = new BoolSaveSetting(SECTION_NAME_SETTINGS, "Auto Validate Song On Save", true);
         automaticallyCheckForUpdates = new BoolSaveSetting(SECTION_NAME_SETTINGS, "Auto Check For Updates", true);
+        discordStatus = new BoolSaveSetting(SECTION_NAME_SETTINGS, "Discord Status", true);
 
         audioCalibrationMS = new IntSaveSetting(SECTION_NAME_SETTINGS, "Audio calibration", 0);
         clapCalibrationMS = new IntSaveSetting(SECTION_NAME_SETTINGS, "Clap calibration", 0);
