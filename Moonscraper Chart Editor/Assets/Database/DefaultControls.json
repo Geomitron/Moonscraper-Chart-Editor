@@ -711,12 +711,14 @@
                     {
                         "modifiers": 0,
                         "keys": [
-                            93
+                            46
                         ]
                     },
                     {
                         "modifiers": 0,
-                        "keys": []
+                        "keys": [
+                            93
+                        ]
                     }
                 ],
                 "gpButtonMaps": [
@@ -735,12 +737,14 @@
                     {
                         "modifiers": 0,
                         "keys": [
-                            91
+                            44
                         ]
                     },
                     {
                         "modifiers": 0,
-                        "keys": []
+                        "keys": [
+                            91
+                        ]
                     }
                 ],
                 "gpButtonMaps": [
