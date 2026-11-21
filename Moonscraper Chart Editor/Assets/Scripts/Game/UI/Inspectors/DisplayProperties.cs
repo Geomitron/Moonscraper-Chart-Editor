@@ -74,6 +74,7 @@ public class DisplayProperties : UpdateableService
         highwayLengthSlider.value = Globals.gameSettings.highwayLength;
 
         UpdateGameSpeedText();
+        AddGameSpeedArrows();
 
         snappingStep.onValidateInput = Step.validateStepVal;
         UpdateSnappingStepText();
@@ -208,6 +209,43 @@ public class DisplayProperties : UpdateableService
         float percent = Mathf.Round(Globals.gameSettings.gameSpeed * 100);
         float next = direction > 0 ? (Mathf.Floor(percent / step) + 1) * step : (Mathf.Ceil(percent / step) - 1) * step;
         gameSpeedSlider.value = Mathf.Clamp(next, gameSpeedSlider.minValue, gameSpeedSlider.maxValue);
+    }
+
+    // Left and right arrows just after the speed text, made from the Step arrows (an up arrow, turned) so they look the same
+    void AddGameSpeedArrows()
+    {
+        Transform stepArrow = snappingStep.transform.parent.Find("Increase Step");
+        // From the text's left edge, where it starts
+        float x = gameSpeed.preferredWidth + 6;
+
+        AddGameSpeedArrow(stepArrow, "Decrease Song Speed", 90, x, -1, "Decrease Song Speed\nShortcut Key: |SongSpeedDecrease|");
+        AddGameSpeedArrow(stepArrow, "Increase Song Speed", -90, x + 13, 1, "Increase Song Speed\nShortcut Key: |SongSpeedIncrease|");
+    }
+
+    void AddGameSpeedArrow(Transform stepArrow, string name, float angle, float x, int direction, string hint)
+    {
+        GameObject arrow = Instantiate(stepArrow.gameObject, gameSpeed.transform, false);
+        arrow.name = name;
+        RectTransform rect = (RectTransform)arrow.transform;
+        rect.localRotation = Quaternion.Euler(0, 0, angle);
+        rect.anchorMin = rect.anchorMax = new Vector2(0, 1);
+        // Centred on the text's first line, which is at the top of its box
+        rect.anchoredPosition = new Vector2(x + rect.sizeDelta.y / 2, -gameSpeed.fontSize * 0.6f);
+
+        Button button = arrow.GetComponent<Button>();
+        button.onClick = new Button.ButtonClickedEvent();
+        button.onClick.AddListener(() => StepGameSpeed(direction));
+
+        // A new hint, since the Step arrow's may have already set itself up for that arrow
+        HintMouseOver stepHint = stepArrow.GetComponent<HintMouseOver>();
+        DestroyImmediate(arrow.GetComponent<HintMouseOver>());
+        foreach (var trigger in arrow.GetComponents<UnityEngine.EventSystems.EventTrigger>())
+            DestroyImmediate(trigger);
+
+        HintMouseOver hintMouseOver = arrow.AddComponent<HintMouseOver>();
+        hintMouseOver.message = hint;
+        if (stepHint)
+            hintMouseOver.offset = stepHint.offset;
     }
 
     void UpdateGameSpeedText()
