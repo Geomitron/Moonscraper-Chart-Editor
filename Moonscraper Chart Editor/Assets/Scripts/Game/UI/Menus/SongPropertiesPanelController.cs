@@ -189,7 +189,61 @@ public class SongPropertiesPanelController : TabMenu
                 AddNewKeyRow();
         }
 
+        LinkTabOrder();
         RefreshIniPreview();
+    }
+
+    // Tab (UITabbing) moves down and Shift+Tab up through the text boxes in the order they're shown. The rows are built here, so
+    // their boxes start with the template's navigation, which leads nowhere.
+    void LinkTabOrder()
+    {
+        InputField[] inputs = rowsContent.GetComponentsInChildren<InputField>();
+        for (int i = 0; i < inputs.Length; ++i)
+        {
+            Navigation navigation = new Navigation() { mode = Navigation.Mode.Explicit };
+            navigation.selectOnUp = i > 0 ? inputs[i - 1] : null;
+            navigation.selectOnDown = i < inputs.Length - 1 ? inputs[i + 1] : null;
+            inputs[i].navigation = navigation;
+        }
+
+        if (gameObject.activeInHierarchy)
+            UITabbing.defaultSelectable = defaultSelectable;
+    }
+
+    protected override void Update()
+    {
+        base.Update();
+        KeepSelectedRowInView();
+    }
+
+    GameObject m_selectedInView;
+
+    // Scrolls the rows so a box Tab moves to isn't hidden above or below the visible area
+    void KeepSelectedRowInView()
+    {
+        GameObject selected = UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject;
+        if (selected == m_selectedInView)
+            return;
+
+        m_selectedInView = selected;
+        if (!selected || !selected.transform.IsChildOf(rowsContent))
+            return;
+
+        const float margin = 6;
+        RectTransform viewport = rowsScrollRect.viewport;
+        Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(viewport, selected.transform);
+        Rect view = viewport.rect;
+        float shift = 0;
+        if (bounds.max.y + margin > view.yMax)
+            shift = bounds.max.y + margin - view.yMax;
+        else if (bounds.min.y - margin < view.yMin)
+            shift = bounds.min.y - margin - view.yMin;
+
+        if (shift != 0)
+        {
+            rowsScrollRect.velocity = Vector2.zero;
+            rowsContent.anchoredPosition -= new Vector2(0, shift);
+        }
     }
 
     bool HasValue(Row row)

@@ -23,7 +23,8 @@ public class UITabbing : UpdateableService {
                     next = EventSystem.current.currentSelectedGameObject.GetComponent<Selectable>().FindSelectableOnDown();
             }
 
-            if (next != null)
+            // A menu's first field can be on a tab that isn't shown
+            if (next != null && next.IsActive())
             {
                 InputField inputfield = next.GetComponent<InputField>();
                 if (inputfield != null) inputfield.OnPointerClick(new PointerEventData(EventSystem.current));  //if it's an input field, also set the text caret
