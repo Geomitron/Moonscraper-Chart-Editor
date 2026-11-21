@@ -82,6 +82,7 @@ public class TimelineMovementController : MovementController
 
         string text = FormatTime(strikeLineTime, Globals.gameSettings.copyTimePattern);
         GUIUtility.systemCopyBuffer = text;
+        editor.services.notificationBar.PushNotification("TIME COPIED: " + text, 2, true);
     }
 
     public const string DefaultTimePattern = "mm:ss.ff";
