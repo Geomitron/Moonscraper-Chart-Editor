@@ -705,6 +705,54 @@
             }
         },
         {
+            "action": "SongSpeedIncrease",
+            "input": {
+                "kbMaps": [
+                    {
+                        "modifiers": 0,
+                        "keys": [
+                            93
+                        ]
+                    },
+                    {
+                        "modifiers": 0,
+                        "keys": []
+                    }
+                ],
+                "gpButtonMaps": [
+                    {
+                        "buttons": [],
+                        "axes": []
+                    }
+                ],
+                "jsMaps": []
+            }
+        },
+        {
+            "action": "SongSpeedDecrease",
+            "input": {
+                "kbMaps": [
+                    {
+                        "modifiers": 0,
+                        "keys": [
+                            91
+                        ]
+                    },
+                    {
+                        "modifiers": 0,
+                        "keys": []
+                    }
+                ],
+                "gpButtonMaps": [
+                    {
+                        "buttons": [],
+                        "axes": []
+                    }
+                ],
+                "jsMaps": []
+            }
+        },
+        {
             "action": "ReloadAudio",
             "input": {
                 "kbMaps": [

@@ -342,6 +342,28 @@
             }
         },
         {
+            "mSChartEditorInputAction": "SongSpeedIncrease",
+            "properties": {
+                "displayName": "Increase Song Speed",
+                "rebindable": true,
+                "hiddenInLists": false,
+                "anyDirectionAxis": false,
+                "category": 1,
+                "allowSameFrameMultiInput": false
+            }
+        },
+        {
+            "mSChartEditorInputAction": "SongSpeedDecrease",
+            "properties": {
+                "displayName": "Decrease Song Speed",
+                "rebindable": true,
+                "hiddenInLists": false,
+                "anyDirectionAxis": false,
+                "category": 1,
+                "allowSameFrameMultiInput": false
+            }
+        },
+        {
             "mSChartEditorInputAction": "ReloadAudio",
             "properties": {
                 "displayName": "Reload Audio",

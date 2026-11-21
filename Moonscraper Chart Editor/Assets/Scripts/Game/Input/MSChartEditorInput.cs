@@ -60,6 +60,8 @@ public enum MSChartEditorInputActions
     NoteSetAltDoubleKick,
     
     PlayPause,
+    SongSpeedIncrease,
+    SongSpeedDecrease,
 
     ReloadAudio,
 
