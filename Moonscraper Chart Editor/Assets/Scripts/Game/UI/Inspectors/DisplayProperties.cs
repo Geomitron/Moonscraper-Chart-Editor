@@ -201,6 +201,15 @@ public class DisplayProperties : UpdateableService
         editor.events.hyperspeedChangeEvent.Fire();
     }
 
+    // The speed shortcuts go to the next multiple of 25% in their direction, within the slider's range, by moving the slider
+    public void StepGameSpeed(int direction)
+    {
+        const float step = 25;
+        float percent = Mathf.Round(Globals.gameSettings.gameSpeed * 100);
+        float next = direction > 0 ? (Mathf.Floor(percent / step) + 1) * step : (Mathf.Ceil(percent / step) - 1) * step;
+        gameSpeedSlider.value = Mathf.Clamp(next, gameSpeedSlider.minValue, gameSpeedSlider.maxValue);
+    }
+
     void UpdateGameSpeedText()
     {
         gameSpeed.text = string.Format("Speed- x{0:0.00}", Globals.gameSettings.gameSpeed);
