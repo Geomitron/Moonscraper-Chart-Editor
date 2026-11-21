@@ -17,6 +17,7 @@ public class GameSettings
     const string SECTION_NAME_GRAPHICS = "Graphics";
     const string SECTION_NAME_LYRICEDITOR = "Lyric Editor";
     const string SECTION_NAME_SONG = "Song";
+    const string SECTION_NAME_NEW_SONG_INI = "New Song song.ini";
 
     public class LyricEditorSettings
     {
@@ -183,6 +184,74 @@ public class GameSettings
         }
     }
 
+    /// <summary>
+    /// song.ini keys and values, saved as the lines of their own config.ini section. A row without a key or a value sets nothing,
+    /// so it isn't saved.
+    /// </summary>
+    public class SongIniSaveSetting : SaveSetting
+    {
+        public class Row
+        {
+            public string key = string.Empty;
+            public string value = string.Empty;
+        }
+
+        public List<Row> rows = new List<Row>();
+
+        public SongIniSaveSetting(string categoryKey) : base(categoryKey, string.Empty)
+        {
+        }
+
+        /// <summary>
+        /// The rows that set a key, in their order: each key named as song.ini names it, trimmed and in lowercase.
+        /// </summary>
+        public List<KeyValuePair<string, string>> pairs
+        {
+            get
+            {
+                var pairs = new List<KeyValuePair<string, string>>();
+                foreach (Row row in rows)
+                {
+                    string key = (row.key ?? string.Empty).Trim().ToLowerInvariant();
+                    string value = (row.value ?? string.Empty).Trim();
+                    if (key != string.Empty && !key.Contains("=") && !SongIniKeys.IsUnset(key, value))
+                        pairs.Add(new KeyValuePair<string, string>(key, value));
+                }
+
+                return pairs;
+            }
+        }
+
+        public override void WriteToIni(INIParser iniparse)
+        {
+            iniparse.SectionDelete(categoryKey);
+            foreach (var pair in pairs)
+            {
+                iniparse.WriteValue(categoryKey, pair.Key, pair.Value);
+            }
+        }
+
+        public override void ReadFromIni(INIParser iniparse)
+        {
+            rows = new List<Row>();
+            foreach (string key in iniparse.GetKeys(categoryKey))
+            {
+                rows.Add(new Row() { key = key, value = iniparse.ReadValue(categoryKey, key, string.Empty) });
+            }
+        }
+
+        public override string ToString()
+        {
+            var lines = new List<string>();
+            foreach (var pair in pairs)
+            {
+                lines.Add(pair.Key + " = " + pair.Value);
+            }
+
+            return string.Join(", ", lines.ToArray());
+        }
+    }
+
     public class EnumSaveSetting<EnumType> : SaveSetting where EnumType : Enum
     {
         public EnumType value;
@@ -300,6 +369,9 @@ public class GameSettings
 
     public StringSaveSetting copyTimePattern;
 
+    // The song.ini keys File > New sets, from Settings > Editor
+    public SongIniSaveSetting newSongIni;
+
     public EnumSaveSetting<ClapToggle> clapProperties;
     public EnumSaveSetting<NotePlacementMode> notePlacementMode;
     public EnumSaveSetting<SongValidate.PlatformValidationFlags> songValidatorModes;
@@ -371,6 +443,7 @@ public class GameSettings
         _sfxVolume = new FloatSaveSetting(SECTION_NAME_AUDIO, "SFX", 1.0f);
 
         copyTimePattern = new StringSaveSetting(SECTION_NAME_SETTINGS, "Copy Time Pattern", TimelineMovementController.DefaultTimePattern);
+        newSongIni = new SongIniSaveSetting(SECTION_NAME_NEW_SONG_INI);
 
         clapProperties = new EnumSaveSetting<ClapToggle>(SECTION_NAME_SETTINGS, "Clap", ClapToggle.ALL_NOTES | ClapToggle.STRUM | ClapToggle.HOPO | ClapToggle.TAP);
         notePlacementMode = new EnumSaveSetting<NotePlacementMode>(SECTION_NAME_SETTINGS, "Note Placement Mode", NotePlacementMode.Default);

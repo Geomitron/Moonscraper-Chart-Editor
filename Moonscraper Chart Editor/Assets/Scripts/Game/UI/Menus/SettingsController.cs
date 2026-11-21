@@ -89,6 +89,11 @@ public class SettingsController : TabMenu
         });
         stemMuteButtons.Refresh();
 
+        // The list goes in the column of the New Song Resolution row, in the Editor tab
+        Transform resolutionRow = newSongResolutionInputField.transform.parent;
+        new NewSongIniList(Globals.gameSettings.newSongIni, (RectTransform)resolutionRow.parent,
+            resolutionRow.Find("New Song Resolution Text").GetComponent<Text>(), newSongResolutionInputField, lyricEditorButton, FitMenuContextArea);
+
         sustainGapInput.onValidateInput = Step.validateStepVal;
         sustainGapInput.text = Globals.gameSettings.sustainGap.ToString();
         sustainGapTimeInput.text = Globals.gameSettings.sustainGapTimeMs.ToString();

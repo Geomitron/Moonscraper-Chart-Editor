@@ -38,16 +38,20 @@ public class TabMenu : DisplayMenu
         }
 
         content.gameObject.SetActive(true);
+        currentContent = content;
+        FitMenuContextArea();
+    }
 
-        if (menuContextArea)
+    // The scrolled area's height fits the current tab's content
+    protected void FitMenuContextArea()
+    {
+        if (menuContextArea && currentContent)
         {
             Vector2 size = new Vector2();
             size.x = menuContextArea.sizeDelta.x;
-            size.y += content.rect.height - content.localPosition.y;
+            size.y += currentContent.rect.height - currentContent.localPosition.y;
             menuContextArea.sizeDelta = size;
         }
-
-        currentContent = content;
     }
 
     public void SetCurrentButton(Button button)

@@ -199,8 +199,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         ChangeState(State.Editor);
 
         // Create a default song
-        currentSong = new Song();
-        currentSong.resolution = Globals.gameSettings.newSongResolution;
+        currentSong = CreateNewSong();
         LoadSong(currentSong, true);
 
         yield return null;
@@ -603,6 +602,18 @@ public class ChartEditor : UnitySingleton<ChartEditor>
     }
 
 #region Chart Loading/Saving
+    /// <summary>
+    /// A new chart, with the resolution and the song.ini keys set in Settings > Editor. The keys are read as a song.ini opened
+    /// with the chart would be.
+    /// </summary>
+    public static Song CreateNewSong()
+    {
+        Song song = new Song();
+        song.resolution = Globals.gameSettings.newSongResolution;
+        SongIniFunctions.OpenSongIni(song, Globals.gameSettings.newSongIni.pairs);
+        return song;
+    }
+
     public void New()
     {
         if (!EditCheck())
@@ -619,8 +630,7 @@ public class ChartEditor : UnitySingleton<ChartEditor>
         currentSongAudio.FreeAudioStreams();
         currentUnpackFolder = null;
         currentSongAudio.DeleteUnpackFolders(currentUnpackFolder);
-        currentSong = new Song();
-        currentSong.resolution = Globals.gameSettings.newSongResolution;
+        currentSong = CreateNewSong();
 
         sessionFlags &= ~ChartEditorSessionFlags.CurrentChartSavedInProprietyFormat;
 
