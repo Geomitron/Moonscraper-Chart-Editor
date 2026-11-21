@@ -50,6 +50,7 @@ public class SettingsController : TabMenu
     public InputField sustainGapTimeInput;
     public InputField lyricEditorPhaseEndTimeInput;
     public InputField newSongResolutionInputField;
+    public InputField copyTimePatternInputField;
 
     public Dropdown gameplayStartDelayDropdown;
     public Dropdown fpsSelectDropdown;
@@ -157,6 +158,7 @@ public class SettingsController : TabMenu
         sustainGapTimeInput.text = Globals.gameSettings.sustainGapTimeMs.ToString();
         lyricEditorPhaseEndTimeInput.text = Globals.gameSettings.lyricEditorSettings.phaseEndThreashold.ToString();
         newSongResolutionInputField.text = Globals.gameSettings.newSongResolution.ToString();
+        copyTimePatternInputField.text = Globals.gameSettings.copyTimePattern;
 
         UpdateSustainGapInteractability();
 
@@ -450,6 +452,11 @@ public class SettingsController : TabMenu
         Globals.gameSettings.newSongResolution.value = textValue;
 
         newSongResolutionInputField.text = Globals.gameSettings.newSongResolution.ToString();
+    }
+
+    public void SetCopyTimePattern(string value)
+    {
+        Globals.gameSettings.copyTimePattern.value = value;
     }
 
     public void SetBgSwapTime(int value)

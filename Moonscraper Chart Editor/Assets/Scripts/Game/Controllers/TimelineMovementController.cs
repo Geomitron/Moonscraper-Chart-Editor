@@ -2,7 +2,11 @@
 // See LICENSE in project root for license information.
 
 using UnityEngine;
+using UnityEngine.EventSystems;
+using System;
 using System.Collections;
+using System.Globalization;
+using System.Text;
 using MoonscraperEngine.Audio;
 using MoonscraperChartEditor.Song;
 
@@ -38,6 +42,117 @@ public class TimelineMovementController : MovementController
         base.Start();
         timeline.handlePos = 0;
         UpdatePosBasedTimelineHandle();
+
+        if (timePosition)
+        {
+            // The time's canvas has no raycaster, so the time gets its own canvas and raycaster to receive clicks
+            timePosition.gameObject.AddComponent<Canvas>();
+            timePosition.gameObject.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            timePosition.raycastTarget = true;
+
+            var trigger = timePosition.gameObject.AddComponent<EventTrigger>();
+            var click = new EventTrigger.Entry();
+            click.eventID = EventTriggerType.PointerClick;
+            click.callback.AddListener((eventData) => { CopyTime(); });
+            trigger.triggers.Add(click);
+        }
+    }
+
+    bool audioLoaded
+    {
+        get
+        {
+            foreach (var stream in editor.currentSongAudio.bassAudioStreams)
+            {
+                if (AudioManager.StreamIsValid(stream))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    float strikeLineTime { get { return ChartEditor.WorldYPositionToTime(strikeLine.position.y); } }
+
+    // Copies the time on screen to the clipboard in the user's pattern. While the time shows "No audio" there's no time to copy.
+    void CopyTime()
+    {
+        if (!audioLoaded)
+            return;
+
+        string text = FormatTime(strikeLineTime, Globals.gameSettings.copyTimePattern);
+        GUIUtility.systemCopyBuffer = text;
+    }
+
+    public const string DefaultTimePattern = "mm:ss.ff";
+
+    /// <summary>
+    /// The time as text in a pattern the user sets. h, m and s are hours, minutes and seconds, f, ff and fff tenths, hundredths
+    /// and thousandths, and a doubled letter keeps the leading zero. The largest unit in the pattern counts past its usual limit
+    /// (without h, minutes count past 59), fractions are truncated, and every other character is copied as it is. A negative
+    /// time gets a '-' before its first number. An empty pattern is DefaultTimePattern, which under an hour gives the same text as
+    /// the time on screen.
+    /// </summary>
+    public static string FormatTime(float time, string pattern)
+    {
+        if (string.IsNullOrEmpty(pattern))
+            pattern = DefaultTimePattern;
+
+        // The same TimeSpan the time on screen comes from (Utility.timeConvertion)
+        TimeSpan timeSpan = TimeSpan.FromSeconds(time);
+        long ticks = Math.Abs(timeSpan.Ticks);
+        bool hasHours = pattern.IndexOf('h') >= 0;
+        bool hasMinutes = pattern.IndexOf('m') >= 0;
+        bool signWritten = timeSpan.Ticks >= 0;
+
+        StringBuilder text = new StringBuilder();
+        int i = 0;
+        while (i < pattern.Length)
+        {
+            char letter = pattern[i];
+            int count = 1;
+            while (i + count < pattern.Length && pattern[i + count] == letter)
+                ++count;
+            i += count;
+
+            long value;
+            switch (letter)
+            {
+                case 'h':
+                    value = ticks / TimeSpan.TicksPerHour;
+                    break;
+                case 'm':
+                    value = ticks / TimeSpan.TicksPerMinute;
+                    if (hasHours)
+                        value %= 60;
+                    break;
+                case 's':
+                    value = ticks / TimeSpan.TicksPerSecond;
+                    if (hasHours || hasMinutes)
+                        value %= 60;
+                    break;
+                case 'f':
+                    // A TimeSpan holds 7 fractional digits; keep the first ones
+                    count = Math.Min(count, 7);
+                    value = ticks % TimeSpan.TicksPerSecond;
+                    for (int digit = count; digit < 7; ++digit)
+                        value /= 10;
+                    break;
+                default:
+                    text.Append(letter, count);
+                    continue;
+            }
+
+            if (!signWritten)
+            {
+                text.Append('-');
+                signWritten = true;
+            }
+
+            text.Append(value.ToString(CultureInfo.InvariantCulture).PadLeft(count, '0'));
+        }
+
+        return text.ToString();
     }
 
     const float ARROW_INIT_DELAY_TIME = 0.5f;
@@ -69,22 +184,15 @@ public class TimelineMovementController : MovementController
         // Update timer text
         if (timePosition)
         {
-            bool audioLoaded = false;
-            foreach (var stream in editor.currentSongAudio.bassAudioStreams)
-            {
-                if (AudioManager.StreamIsValid(stream))
-                    audioLoaded = true;
-            }
-
             if (!audioLoaded)//editor.currentSong.songAudioLoaded)
             {
                 timePosition.color = Color.red;
-                timePosition.text = "No audio";               
+                timePosition.text = "No audio";
             }
             else
             {
                 timePosition.color = Color.white;
-                timePosition.text = Utility.timeConvertion(ChartEditor.WorldYPositionToTime(strikeLine.position.y));
+                timePosition.text = Utility.timeConvertion(strikeLineTime);
             }
         }
 

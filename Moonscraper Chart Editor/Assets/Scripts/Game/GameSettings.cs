@@ -155,6 +155,34 @@ public class GameSettings
         }
     }
 
+    public class StringSaveSetting : SaveSetting
+    {
+        public string value;
+        public static implicit operator string(StringSaveSetting v) { return v.value; }
+
+        public string defaultValue;
+        public StringSaveSetting(string categoryKey, string saveKey, string defaultVal) : base(categoryKey, saveKey)
+        {
+            defaultValue = defaultVal;
+            value = defaultValue;
+        }
+
+        public override void WriteToIni(INIParser iniparse)
+        {
+            iniparse.WriteValue(categoryKey, saveKey, value);
+        }
+
+        public override void ReadFromIni(INIParser iniparse)
+        {
+            value = iniparse.ReadValue(categoryKey, saveKey, defaultValue);
+        }
+
+        public override string ToString()
+        {
+            return value;
+        }
+    }
+
     public class EnumSaveSetting<EnumType> : SaveSetting where EnumType : Enum
     {
         public EnumType value;
@@ -270,6 +298,8 @@ public class GameSettings
 
     FloatSaveSetting _sfxVolume;
 
+    public StringSaveSetting copyTimePattern;
+
     public EnumSaveSetting<ClapToggle> clapProperties;
     public EnumSaveSetting<NotePlacementMode> notePlacementMode;
     public EnumSaveSetting<SongValidate.PlatformValidationFlags> songValidatorModes;
@@ -339,6 +369,8 @@ public class GameSettings
         vol_crowd = new FloatSaveSetting(SECTION_NAME_AUDIO, "Crowd Stream", 1.0f);
         audio_pan = new FloatSaveSetting(SECTION_NAME_AUDIO, "Audio Pan", 0.0f);
         _sfxVolume = new FloatSaveSetting(SECTION_NAME_AUDIO, "SFX", 1.0f);
+
+        copyTimePattern = new StringSaveSetting(SECTION_NAME_SETTINGS, "Copy Time Pattern", TimelineMovementController.DefaultTimePattern);
 
         clapProperties = new EnumSaveSetting<ClapToggle>(SECTION_NAME_SETTINGS, "Clap", ClapToggle.ALL_NOTES | ClapToggle.STRUM | ClapToggle.HOPO | ClapToggle.TAP);
         notePlacementMode = new EnumSaveSetting<NotePlacementMode>(SECTION_NAME_SETTINGS, "Note Placement Mode", NotePlacementMode.Default);
