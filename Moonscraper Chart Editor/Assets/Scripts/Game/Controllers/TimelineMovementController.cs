@@ -95,7 +95,8 @@ public class TimelineMovementController : MovementController
     /// <summary>
     /// The time as text in a pattern the user sets. h, m and s are hours, minutes and seconds, f, ff and fff tenths, hundredths
     /// and thousandths, and a doubled letter keeps the leading zero. The largest unit in the pattern counts past its usual limit
-    /// (without h, minutes count past 59), fractions are truncated, and every other character is copied as it is. A negative
+    /// (without h, minutes count past 59; with f alone, fff gives the whole time in milliseconds, without leading zeros, as
+    /// song.ini's preview_start_time), fractions are truncated, and every other character is copied as it is. A negative
     /// time gets a '-' before its first number. An empty pattern is DefaultTimePattern, which under an hour gives the same text as
     /// the time on screen.
     /// </summary>
@@ -109,6 +110,7 @@ public class TimelineMovementController : MovementController
         long ticks = Math.Abs(timeSpan.Ticks);
         bool hasHours = pattern.IndexOf('h') >= 0;
         bool hasMinutes = pattern.IndexOf('m') >= 0;
+        bool hasSeconds = pattern.IndexOf('s') >= 0;
         bool signWritten = timeSpan.Ticks >= 0;
 
         StringBuilder text = new StringBuilder();
@@ -140,9 +142,11 @@ public class TimelineMovementController : MovementController
                 case 'f':
                     // A TimeSpan holds 7 fractional digits; keep the first ones
                     count = Math.Min(count, 7);
-                    value = ticks % TimeSpan.TicksPerSecond;
+                    value = hasHours || hasMinutes || hasSeconds ? ticks % TimeSpan.TicksPerSecond : ticks;
                     for (int digit = count; digit < 7; ++digit)
                         value /= 10;
+                    if (!hasHours && !hasMinutes && !hasSeconds)
+                        count = 1;      // The whole time in this unit, without leading zeros
                     break;
                 default:
                     text.Append(letter, count);
