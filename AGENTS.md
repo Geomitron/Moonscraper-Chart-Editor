@@ -6,7 +6,7 @@ Geo's fork of FireFox2000000/Moonscraper-Chart-Editor. Its releases come from th
 
 - Keep `master` an exact copy of upstream `master`: update it with GitHub's Sync fork, and start every upstream PR branch from it. Never use Sync fork on `geomitron`, whose history is linear.
 - Keep the fork's label (`Globals.applicationBranchName = "Geomitron"`, shown after the version in the window title and the program info), its own Open with entry (`FileTypeRegistration_Windows`, ProgIDs `MoonscraperChartEditorGeomitron.<ext>`), and the zip package: the official installer's `AppId` would replace an official install.
-- Commit no test hook or batch test script: copy it into `Assets/Editor` (a build hook into `Assets/Scripts`) for one run, then delete it.
+- Commit no test hook or batch test script: copy it into `Assets/Editor` (a build hook into `Assets/Scripts`) for one run, then delete it. A build hook catches its own exceptions and quits, and sets `ChartEditor`'s private `_ignoreExceptions` to true by reflection so no exception opens the "Oops" dialog: a failed run then ends by itself instead of leaving the dialog on screen.
 - Discard the change Unity makes to `ProjectSettings/UnityConnectSettings.asset` when it opens the project.
 - A run of a built Moonscraper uses the real user's settings: the folder `%USERPROFILE%\AppData\LocalLow\FireFox Dev\Moonscraper Chart Editor` (config.ini, controls.json, autosave and audio cache files), the registry key `HKCU\Software\FireFox Dev\Moonscraper Chart Editor` (window placement), and the Open with entries under `HKCU\Software\Classes`. Back them up right before each run and restore them right after. The Unity batch build touches none of them.
 
