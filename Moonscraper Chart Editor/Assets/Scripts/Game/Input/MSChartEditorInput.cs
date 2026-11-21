@@ -67,6 +67,7 @@ public enum MSChartEditorInputActions
 
     SelectAll,
     SelectAllSection,
+    DeselectAll,
     StepDecrease,
     StepIncrease,
     StepDecreaseBy1,
