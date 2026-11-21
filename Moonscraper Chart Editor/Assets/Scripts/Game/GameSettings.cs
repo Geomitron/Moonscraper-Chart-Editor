@@ -186,7 +186,8 @@ public class GameSettings
 
     /// <summary>
     /// song.ini keys and values, saved as the lines of their own config.ini section. A row without a key or a value sets nothing,
-    /// so it isn't saved.
+    /// so it isn't saved, nor is a key config.ini or song.ini would read as something else: one containing "=", or starting with
+    /// "[" (a section header), ";" or "#" (a comment).
     /// </summary>
     public class SongIniSaveSetting : SaveSetting
     {
@@ -203,7 +204,8 @@ public class GameSettings
         }
 
         /// <summary>
-        /// The rows that set a key, in their order: each key named as song.ini names it, trimmed and in lowercase.
+        /// The rows that set a key, in their order: each key named as song.ini names it, trimmed and in lowercase. A key set by more
+        /// than one row appears once, at its last row with that row's value, as config.ini keeps one value per key.
         /// </summary>
         public List<KeyValuePair<string, string>> pairs
         {
@@ -214,12 +216,29 @@ public class GameSettings
                 {
                     string key = (row.key ?? string.Empty).Trim().ToLowerInvariant();
                     string value = (row.value ?? string.Empty).Trim();
-                    if (key != string.Empty && !key.Contains("=") && !SongIniKeys.IsUnset(key, value))
-                        pairs.Add(new KeyValuePair<string, string>(key, value));
+                    if (key == string.Empty || key.Contains("=") || key[0] == '[' || key[0] == ';' || key[0] == '#' || SongIniKeys.IsUnset(key, value))
+                        continue;
+
+                    pairs.RemoveAll(pair => pair.Key == key);
+                    pairs.Add(new KeyValuePair<string, string>(key, value));
                 }
 
                 return pairs;
             }
+        }
+
+        /// <summary>
+        /// Replaces the rows with the ones config.ini keeps, as they read back after a restart
+        /// </summary>
+        public void Normalize()
+        {
+            var normalized = new List<Row>();
+            foreach (var pair in pairs)
+            {
+                normalized.Add(new Row() { key = pair.Key, value = pair.Value });
+            }
+
+            rows = normalized;
         }
 
         public override void WriteToIni(INIParser iniparse)
