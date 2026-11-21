@@ -23,6 +23,7 @@ public class TimelineMovementController : MovementController
     Vector2? middleClickDownScreenPos = null;
     const float c_middleClickMouseDragSensitivity = 700.0f;
     const float autoscrollSpeed = 10.0f;
+    static readonly Vector2 c_timeHintOffset = new Vector2(0, -17);     // Just below the time's 30-unit-high box; the hint keeps itself on screen
     readonly MSChartEditorInputActions[] arrowKeyShortcutGroup = new MSChartEditorInputActions[] { MSChartEditorInputActions.MoveStepPositive, MSChartEditorInputActions.MoveStepNegative, MSChartEditorInputActions.MoveMeasurePositive, MSChartEditorInputActions.MoveMeasureNegative };
 
     public override void SetPosition(uint tick)
@@ -55,6 +56,10 @@ public class TimelineMovementController : MovementController
             click.eventID = EventTriggerType.PointerClick;
             click.callback.AddListener((eventData) => { CopyTime(); });
             trigger.triggers.Add(click);
+
+            HintMouseOver hint = timePosition.gameObject.AddComponent<HintMouseOver>();
+            hint.message = "Click to copy";
+            hint.offset = c_timeHintOffset;
         }
     }
 
