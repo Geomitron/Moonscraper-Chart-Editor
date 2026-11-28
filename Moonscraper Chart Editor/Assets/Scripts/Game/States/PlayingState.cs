@@ -88,34 +88,14 @@ public class PlayingState : SystemManagerState
             Globals.gameSettings.snappingStep.AdjustBy(-1);
 
         if (MSChartEditorInput.GetInputDown(MSChartEditorInputActions.SongSpeedIncrease))
-            StepGameSpeed(1);
+            editor.uiServices.editorPanels.displayProperties.StepGameSpeed(1);
 
         else if (MSChartEditorInput.GetInputDown(MSChartEditorInputActions.SongSpeedDecrease))
-            StepGameSpeed(-1);
+            editor.uiServices.editorPanels.displayProperties.StepGameSpeed(-1);
 
         if (MSChartEditorInput.GetInputDown(MSChartEditorInputActions.PlayPause) || MSChartEditorInput.GetInputDown(MSChartEditorInputActions.StartGameplay))
         {
             editor.Stop();
-        }
-    }
-
-    // The slider can't move during playback, so a shortcut also keeps the strikeline at its time, since the highway's length
-    // follows the speed, and restarts the audio at the new speed
-    void StepGameSpeed(int direction)
-    {
-        ChartEditor editor = ChartEditor.Instance;
-        float time = editor.currentVisibleTime;
-        float speed = Globals.gameSettings.gameSpeed;
-
-        editor.uiServices.editorPanels.displayProperties.StepGameSpeed(direction);
-        if (Globals.gameSettings.gameSpeed == speed)
-            return;
-
-        editor.movement.SetTime(time);
-        if (audioStarted)
-        {
-            editor.StopAudio();
-            editor.PlayAudio(editor.services.currentVisualAudioTime);
         }
     }
 

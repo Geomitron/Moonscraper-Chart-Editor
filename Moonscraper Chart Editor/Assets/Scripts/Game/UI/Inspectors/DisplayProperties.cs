@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using MoonscraperChartEditor.Song;
+using MoonscraperEngine.Audio;
 
 public class DisplayProperties : UpdateableService
 {
@@ -202,13 +203,29 @@ public class DisplayProperties : UpdateableService
         editor.events.hyperspeedChangeEvent.Fire();
     }
 
-    // The speed shortcuts go to the next multiple of 25% in their direction, within the slider's range, by moving the slider
+    // The speed shortcuts and arrows go to the next multiple of 25% in their direction, within the slider's range, by moving the slider.
+    // The slider can't move during playback, so there the strikeline also keeps its time, since the highway's length follows the
+    // speed, and the audio restarts at the new speed
     public void StepGameSpeed(int direction)
     {
         const float step = 25;
-        float percent = Mathf.Round(Globals.gameSettings.gameSpeed * 100);
+        float time = editor.currentVisibleTime;
+        float speed = Globals.gameSettings.gameSpeed;
+
+        float percent = Mathf.Round(speed * 100);
         float next = direction > 0 ? (Mathf.Floor(percent / step) + 1) * step : (Mathf.Ceil(percent / step) - 1) * step;
         gameSpeedSlider.value = Mathf.Clamp(next, gameSpeedSlider.minValue, gameSpeedSlider.maxValue);
+
+        if (editor.currentState != ChartEditor.State.Playing || Globals.gameSettings.gameSpeed == speed)
+            return;
+
+        editor.movement.SetTime(time);
+        AudioStream audio = editor.currentSongAudio.mainSongAudio;
+        if (audio != null && audio.IsPlaying())
+        {
+            editor.StopAudio();
+            editor.PlayAudio(editor.services.currentVisualAudioTime);
+        }
     }
 
     // Left and right arrows just after the speed text, made from the Step arrows (an up arrow, turned) so they look the same
