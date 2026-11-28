@@ -32,6 +32,12 @@ public class BotGameplayRulestate : BaseGameplayRulestate
                     nextNoteToHit = null;
                 }
             }
+            else
+            {
+                // A note out of view has no controller to check against the strikeline. Leave it for a later frame, when it's back in view
+                // or has fallen out of the window
+                nextNoteToHit = null;
+            }
         }
 
         // Note that having this logic here essentially gives the bot an infinite backend window in case of a framerate hiccup.
